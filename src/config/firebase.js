@@ -5,12 +5,12 @@ import { getFirestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyD2HJu0MHGF7AnkLe0peZGwFIRchkgU_E4",
-  authDomain: "belen-pilates.firebaseapp.com",
-  projectId: "belen-pilates",
-  storageBucket: "belen-pilates.firebasestorage.app",
-  messagingSenderId: "984023521834",
-  appId: "1:984023521834:web:e77c150c41f6d1a89b4153"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 // Initialize Firebase
