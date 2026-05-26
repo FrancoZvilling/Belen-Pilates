@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useMockStore } from '../../store/mockStore';
 import { UserPlus, Calendar, Check, AlertCircle } from 'lucide-react';
 import Modal from '../../components/common/Modal';
+import { db } from '../../config/firebase';
+import { doc, setDoc } from 'firebase/firestore';
 
 export default function AltaAlumno() {
   const grillaMaestra = useMockStore(state => state.grillaMaestra);
@@ -12,6 +14,7 @@ export default function AltaAlumno() {
   const [seleccionados, setSeleccionados] = useState([]);
   
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -49,12 +52,12 @@ export default function AltaAlumno() {
 
   const agruparPorBloque = (horarios) => {
     const manana = horarios.filter(h => parseInt(h.hora) < 13);
-    const siesta = horarios.filter(h => parseInt(h.hora) >= 13 && parseInt(h.hora) < 17);
-    const tarde = horarios.filter(h => parseInt(h.hora) >= 17);
+    const siesta = horarios.filter(h => parseInt(h.hora) >= 13 && parseInt(h.hora) < 18);
+    const tarde = horarios.filter(h => parseInt(h.hora) >= 18);
     return { manana, siesta, tarde };
   };
 
-  const handleGuardar = () => {
+  const handleGuardar = async () => {
     if (!formData.nombre || !formData.email) {
       alert("Por favor completa el nombre y el email.");
       return;
@@ -63,7 +66,29 @@ export default function AltaAlumno() {
       alert("Por favor asigna al menos un horario fijo.");
       return;
     }
-    setIsSuccessModalOpen(true);
+
+    try {
+      setIsSaving(true);
+      // Guardar ticket en "pre_registros" usando el email como ID (en minúsculas)
+      const emailId = formData.email.trim().toLowerCase();
+      const preRegistroRef = doc(db, 'pre_registros', emailId);
+      
+      await setDoc(preRegistroRef, {
+        nombre: formData.nombre,
+        email: emailId,
+        telefono: formData.telefono,
+        plan: plan,
+        turnosFijos: seleccionados.map(s => ({ dia: s.dia, hora: s.hora })),
+        fecha_registro: new Date().toISOString()
+      });
+
+      setIsSuccessModalOpen(true);
+    } catch (error) {
+      console.error("Error al guardar pre-registro: ", error);
+      alert("Hubo un error al guardar los datos. Revisa tu conexión.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -242,13 +267,20 @@ export default function AltaAlumno() {
       </div>
 
       {/* Footer Fijo de Acción */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] pb-safe">
+      <div className="fixed bottom-16 left-0 right-0 p-4 bg-white border-t border-gray-200 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] z-10">
         <button 
           onClick={handleGuardar}
-          className="w-full bg-primary-turnos text-white font-bold py-4 rounded-xl shadow-lg active:scale-95 transition-transform flex items-center justify-center"
+          disabled={isSaving}
+          className="w-full bg-primary-turnos text-white font-bold py-4 rounded-xl shadow-lg active:scale-95 transition-transform flex items-center justify-center disabled:opacity-70 disabled:cursor-not-allowed"
         >
-          <Calendar size={20} className="mr-2" />
-          Guardar y Generar Turnos
+          {isSaving ? (
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+          ) : (
+            <>
+              <Calendar size={20} className="mr-2" />
+              Guardar y Enviar Acceso
+            </>
+          )}
         </button>
       </div>
 
@@ -259,9 +291,9 @@ export default function AltaAlumno() {
       >
         <div className="flex flex-col items-center justify-center py-6 text-center">
           <Check size={80} className="text-green-500 mb-4 bg-green-50 p-4 rounded-full" />
-          <h2 className="text-2xl font-black text-gray-800 mb-2">Alumno Registrado</h2>
+          <h2 className="text-2xl font-black text-gray-800 mb-2">Pre-carga Exitosa</h2>
           <p className="text-gray-600 text-sm px-4">
-            El perfil de <strong>{formData.nombre}</strong> se creó correctamente y se le asignaron {seleccionados.length} turnos semanales fijos.
+            El perfil de <strong>{formData.nombre}</strong> se pre-cargó correctamente. Ya puede crear su cuenta en la aplicación con su email.
           </p>
           
           <button 

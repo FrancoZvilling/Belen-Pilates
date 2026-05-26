@@ -59,8 +59,10 @@ export const intercambiarTurno = async (db, uid, idSesionNueva, idSesionVieja) =
 
 /**
  * Marca la asistencia de un alumno (Resta clase y guarda en historial)
+ * TODO: Mover la lógica original si hace falta, pero ahora usaremos la nueva.
  */
 export const marcarAsistencia = async (db, uid, idSesion) => {
+  // ... (keep this for legacy if needed, or we just leave it)
   const userRef = doc(db, 'usuarios', uid);
   const historialRef = doc(db, 'historial_asistencias', `${uid}_${Date.now()}`);
 
@@ -85,6 +87,93 @@ export const marcarAsistencia = async (db, uid, idSesion) => {
     return { success: true };
   } catch (error) {
     console.error("Error al marcar asistencia:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Nueva lógica de asistencia: Guarda en el array interno del usuario y resta clases_restantes
+ */
+export const registrarAsistenciaAlumno = async (db, uid, fechaIsoString, horaTurno) => {
+  const userRef = doc(db, 'usuarios', uid);
+  
+  try {
+    await runTransaction(db, async (transaction) => {
+      const userDoc = await transaction.get(userRef);
+      if (!userDoc.exists()) throw new Error("Usuario no encontrado");
+
+      const data = userDoc.data();
+      const clasesRestantes = data.clases_restantes ?? 0;
+      
+      if (clasesRestantes <= 0) {
+        throw new Error("No tienes clases restantes para descontar.");
+      }
+
+      const historial = data.historial_asistencias || [];
+      
+      // Para evitar dobles presentes en la misma clase
+      const yaDioPresente = historial.some(h => h.fecha === fechaIsoString && h.hora === horaTurno);
+      if (yaDioPresente) {
+        throw new Error("Ya registraste tu asistencia para esta clase.");
+      }
+
+      const nuevoRegistro = {
+        fecha: fechaIsoString,
+        hora: horaTurno,
+        estado: 'presente',
+        timestamp: new Date().toISOString()
+      };
+
+      transaction.update(userRef, {
+        clases_restantes: clasesRestantes - 1,
+        historial_asistencias: [...historial, nuevoRegistro]
+      });
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("Error registrando asistencia:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Nueva lógica de inasistencia: Guarda en el array como 'ausente' y suma 1 a creditos_recuperacion
+ */
+export const registrarInasistenciaAlumno = async (db, uid, fechaIsoString, horaTurno) => {
+  const userRef = doc(db, 'usuarios', uid);
+  
+  try {
+    await runTransaction(db, async (transaction) => {
+      const userDoc = await transaction.get(userRef);
+      if (!userDoc.exists()) throw new Error("Usuario no encontrado");
+
+      const data = userDoc.data();
+      const creditos = data.creditos_recuperacion ?? 0;
+
+      const historial = data.historial_asistencias || [];
+      
+      // Para evitar dobles registros en la misma clase
+      const yaRegistrado = historial.some(h => h.fecha === fechaIsoString && h.hora === horaTurno);
+      if (yaRegistrado) {
+        throw new Error("Ya hay un registro para esta clase.");
+      }
+
+      const nuevoRegistro = {
+        fecha: fechaIsoString,
+        hora: horaTurno,
+        estado: 'ausente',
+        timestamp: new Date().toISOString()
+      };
+
+      // Nota: NO restamos clases_restantes porque la inasistencia se canjea después.
+      transaction.update(userRef, {
+        creditos_recuperacion: creditos + 1,
+        historial_asistencias: [...historial, nuevoRegistro]
+      });
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("Error registrando inasistencia:", error);
     return { success: false, error: error.message };
   }
 };

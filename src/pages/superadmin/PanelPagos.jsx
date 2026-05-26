@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useMockStore } from '../../store/mockStore';
-import { DollarSign, AlertTriangle, XCircle, Search, Filter, CreditCard, CheckCircle } from 'lucide-react';
+import { DollarSign, AlertTriangle, XCircle, Search, Filter, CreditCard, CheckCircle, LogOut, Users } from 'lucide-react';
 import Modal from '../../components/common/Modal';
+import { useAuthStore } from '../../store/authStore';
 
 export default function PanelPagos() {
+  const logout = useAuthStore(state => state.logout);
   const { alumnosMembresia, ingresosMesActual, registrarPago } = useMockStore();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -51,14 +53,22 @@ export default function PanelPagos() {
     <div className="bg-gray-50 min-h-screen pb-24 font-sans">
       
       {/* Header */}
-      <header className="px-5 pt-8 pb-6 bg-white shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] sticky top-0 z-10 flex items-center">
-        <div className="bg-primary-pagos bg-opacity-10 p-3 rounded-full text-primary-pagos mr-4">
-          <DollarSign size={24} />
+      <header className="px-5 pt-8 pb-6 bg-white shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] sticky top-0 z-10 flex items-center justify-between">
+        <div className="flex items-center">
+          <div className="bg-primary-pagos bg-opacity-10 p-3 rounded-full text-primary-pagos mr-4">
+            <DollarSign size={24} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black text-gray-800">Panel de Pagos</h1>
+            <p className="text-sm font-semibold text-gray-500 mt-1">Gestión financiera</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-black text-gray-800">Panel de Pagos</h1>
-          <p className="text-sm font-semibold text-gray-500 mt-1">Gestión financiera</p>
-        </div>
+        <button 
+          onClick={logout}
+          className="p-2 bg-red-50 rounded-full text-red-500 active:scale-95 transition-transform"
+        >
+          <LogOut size={24} />
+        </button>
       </header>
 
       <div className="px-5 mt-6 space-y-6">
@@ -140,8 +150,10 @@ export default function PanelPagos() {
               <tbody className="divide-y divide-gray-100">
                 {alumnosFiltrados.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="p-8 text-center text-gray-500">
-                      No se encontraron alumnos con los filtros actuales.
+                    <td colSpan="6" className="p-12 text-center">
+                      <Users className="mx-auto text-gray-300 mb-3" size={40} />
+                      <p className="font-bold text-gray-600">No hay alumnos registrados</p>
+                      <p className="text-sm text-gray-400 mt-1">Todavía no hay alumnos cargados en el sistema o no coinciden con la búsqueda.</p>
                     </td>
                   </tr>
                 ) : (

@@ -1,23 +1,29 @@
 import { useState } from 'react';
-import { Users, Search, ShieldAlert, MoreVertical, Mail, Phone, UserPlus } from 'lucide-react';
+import { Users, Search, ShieldAlert, MoreVertical, Mail, Phone, UserPlus, Archive, RefreshCcw } from 'lucide-react';
+import { db } from '../../config/firebase';
+import { archivarUsuario, reactivarUsuario } from '../../services/authService';
 
-// Hardcoded mock data for the demo
-const MOCK_USUARIOS = [
-  { id: 1, nombre: 'Ana López', email: 'ana@ejemplo.com', telefono: '11-1234-5678', rol: 'alumno', estado: 'activo' },
-  { id: 2, nombre: 'Carlos Ruiz', email: 'carlos@ejemplo.com', telefono: '11-2345-6789', rol: 'alumno', estado: 'activo' },
-  { id: 3, nombre: 'Belén (Propietaria)', email: 'belen@pilates.com', telefono: '11-3456-7890', rol: 'superadmin', estado: 'activo' },
-  { id: 4, nombre: 'Laura Giménez', email: 'laura.profe@ejemplo.com', telefono: '11-4567-8901', rol: 'admin', estado: 'activo' },
-  { id: 5, nombre: 'María Gómez', email: 'maria@ejemplo.com', telefono: '11-5678-9012', rol: 'alumno', estado: 'inactivo' },
-  { id: 6, nombre: 'Pedro Martínez', email: 'pedro@ejemplo.com', telefono: '11-6789-0123', rol: 'alumno', estado: 'activo' },
-  { id: 7, nombre: 'Lucía Fernández', email: 'lucia@ejemplo.com', telefono: '11-7890-1234', rol: 'alumno', estado: 'activo' },
-];
+import { useAdminStore } from '../../store/adminStore';
 
 export default function GestionUsuarios() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filtroRol, setFiltroRol] = useState('todos'); // 'todos', 'alumno', 'staff'
+  const [filtroRol, setFiltroRol] = useState('todos'); // 'todos', 'alumno', 'staff', 'inactivos'
+  const [menuAbiertoId, setMenuAbiertoId] = useState(null);
+
+  const { usuarios, preRegistros, usuariosInactivos, preRegistrosInactivos } = useAdminStore();
+  
+  const todosLosUsuarios = filtroRol === 'inactivos' 
+    ? [
+        ...usuariosInactivos.map(u => ({ ...u, isPreRegistro: false })),
+        ...preRegistrosInactivos.map(p => ({ ...p, isPreRegistro: true, rol: 'alumno' }))
+      ]
+    : [
+        ...usuarios.map(u => ({ ...u, isPreRegistro: false })),
+        ...preRegistros.map(p => ({ ...p, isPreRegistro: true, rol: 'alumno' }))
+      ];
 
   // Filtrado de usuarios
-  const usuariosFiltrados = MOCK_USUARIOS.filter(u => {
+  const usuariosFiltrados = todosLosUsuarios.filter(u => {
     const matchesSearch = u.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           u.email.toLowerCase().includes(searchTerm.toLowerCase());
     
@@ -29,13 +35,33 @@ export default function GestionUsuarios() {
   });
 
   const totales = {
-    alumnos: MOCK_USUARIOS.filter(u => u.rol === 'alumno').length,
-    staff: MOCK_USUARIOS.filter(u => ['admin', 'superadmin'].includes(u.rol)).length,
-    inactivos: MOCK_USUARIOS.filter(u => u.estado === 'inactivo').length
+    alumnos: usuarios.filter(u => u.rol === 'alumno').length + preRegistros.length,
+    staff: usuarios.filter(u => ['admin', 'superadmin'].includes(u.rol)).length,
+    inactivos: usuariosInactivos.length + preRegistrosInactivos.length
   };
 
   const getIniciales = (nombre) => {
     return nombre.substring(0, 2).toUpperCase();
+  };
+
+  const handleArchivar = async (usuario) => {
+    if (window.confirm(`¿Estás seguro de que querés archivar a ${usuario.nombre}? Dejará de aparecer en las listas activas.`)) {
+      setMenuAbiertoId(null);
+      const res = await archivarUsuario(db, usuario.id, usuario.isPreRegistro);
+      if (!res.success) {
+        alert("Error al archivar: " + res.error);
+      }
+    }
+  };
+
+  const handleReactivar = async (usuario) => {
+    if (window.confirm(`¿Estás seguro de que querés reactivar a ${usuario.nombre}? Volverá a tener acceso a la aplicación.`)) {
+      setMenuAbiertoId(null);
+      const res = await reactivarUsuario(db, usuario.id, usuario.isPreRegistro);
+      if (!res.success) {
+        alert("Error al reactivar: " + res.error);
+      }
+    }
   };
 
   return (
@@ -90,6 +116,12 @@ export default function GestionUsuarios() {
           >
             Staff ({totales.staff})
           </button>
+          <button 
+            onClick={() => setFiltroRol('inactivos')}
+            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${filtroRol === 'inactivos' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
+          >
+            Inactivos ({totales.inactivos})
+          </button>
         </div>
       </header>
 
@@ -125,6 +157,10 @@ export default function GestionUsuarios() {
                         <span className="bg-primary-pagos bg-opacity-10 text-primary-pagos text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full">
                           {usuario.rol === 'superadmin' ? 'Propietario' : 'Profesor'}
                         </span>
+                      ) : usuario.isPreRegistro ? (
+                        <span className="bg-orange-100 text-orange-600 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full">
+                          Invitado
+                        </span>
                       ) : (
                         <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
                           isInactive ? 'bg-gray-100 text-gray-500' : 'bg-primary-turnos bg-opacity-10 text-primary-turnos'
@@ -133,7 +169,13 @@ export default function GestionUsuarios() {
                         </span>
                       )}
                       
-                      {isInactive && (
+                      {usuario.isPreRegistro && (
+                        <span className="text-orange-400 text-[10px] font-bold uppercase tracking-wider">
+                          (Pendiente)
+                        </span>
+                      )}
+
+                      {isInactive && !usuario.isPreRegistro && (
                         <span className="bg-red-50 text-red-600 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full">
                           Inactivo
                         </span>
@@ -142,9 +184,37 @@ export default function GestionUsuarios() {
                   </div>
                 </div>
 
-                <button className="text-gray-400 hover:text-gray-600 p-2">
-                  <MoreVertical size={20} />
-                </button>
+                <div className="relative">
+                  <button 
+                    onClick={() => setMenuAbiertoId(menuAbiertoId === usuario.id ? null : usuario.id)}
+                    className="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-50 transition-colors"
+                  >
+                    <MoreVertical size={20} />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {menuAbiertoId === usuario.id && (
+                    <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-100 z-10 py-1 overflow-hidden">
+                      {isInactive ? (
+                        <button 
+                          onClick={() => handleReactivar(usuario)}
+                          className="w-full text-left px-4 py-3 text-sm font-semibold text-green-600 hover:bg-green-50 flex items-center transition-colors"
+                        >
+                          <RefreshCcw size={16} className="mr-2" />
+                          Reactivar Alumno
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={() => handleArchivar(usuario)}
+                          className="w-full text-left px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 flex items-center transition-colors"
+                        >
+                          <Archive size={16} className="mr-2" />
+                          Archivar Alumno
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Detalles de Contacto (Plegables visualmente) */}
@@ -163,9 +233,10 @@ export default function GestionUsuarios() {
         })}
 
         {usuariosFiltrados.length === 0 && (
-          <div className="text-center py-10 bg-white rounded-2xl shadow-sm border border-gray-100">
-            <Search className="mx-auto text-gray-300 mb-3" size={40} />
-            <p className="text-gray-500 font-medium">No se encontraron usuarios que coincidan con la búsqueda.</p>
+          <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-3xl p-12 text-center shadow-sm mt-4">
+            <Users className="mx-auto text-gray-300 mb-4" size={48} />
+            <p className="font-bold text-gray-700 text-lg mb-1">Sin usuarios</p>
+            <p className="text-sm text-gray-500">No se encontraron usuarios o el directorio está vacío.</p>
           </div>
         )}
       </div>

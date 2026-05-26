@@ -1,60 +1,54 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 // Mock Data
-const INITIAL_TURNOS = [
-  { id: 't1', fecha: 'Jueves 14', hora: '16:00' },
-  { id: 't2', fecha: 'Martes 19', hora: '18:00' },
-];
+const INITIAL_TURNOS = [];
 
-const INITIAL_BOLSA = [
-  { id: 'b1', fecha: 'Miércoles 13', hora: '17:00', ocupacion: 4, capacidad: 8 },
-  { id: 'b2', fecha: 'Viernes 15', hora: '10:00', ocupacion: 7, capacidad: 8 },
-  { id: 'b3', fecha: 'Viernes 15', hora: '18:00', ocupacion: 2, capacidad: 8 },
-];
+const INITIAL_BOLSA = [];
 
-const INITIAL_CAMILLAS = [
-  { id: 'c1', estado: 'presente', alumno: 'Ana López' },
-  { id: 'c2', estado: 'presente', alumno: 'Carlos Ruiz' },
-  { id: 'c3', estado: 'presente', alumno: 'María Gómez' },
-  { id: 'c4', estado: 'reservada', alumno: 'Pedro Martínez' },
-  { id: 'c5', estado: 'reservada', alumno: 'Lucía Fernández' },
-  { id: 'c6', estado: 'libre', alumno: null },
-  { id: 'c7', estado: 'libre', alumno: null },
-  { id: 'c8', estado: 'libre', alumno: null },
-];
+const INITIAL_CAMILLAS = Array.from({ length: 8 }, (_, i) => ({
+  id: `c${i+1}`,
+  estado: 'libre',
+  alumno: null
+}));
 
-const HORARIOS_BASE = ['08:00', '09:00', '10:00', '14:00', '15:00', '18:00', '19:00', '20:00'];
+const HORARIOS_POR_DIA = {
+  'Lunes':     ['08:00','09:00','10:00','11:00','15:00','16:00','17:00','18:00','19:00','20:00'],
+  'Martes':    ['08:00','09:00','10:00','11:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00'],
+  'Miércoles': ['08:00','09:00','10:00','11:00','15:00','16:00','17:00','18:00','19:00','20:00'],
+  'Jueves':    ['08:00','09:00','10:00','11:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00'],
+  'Viernes':   ['08:00','09:00','10:00','11:00','15:00','18:00','19:00','20:00'],
+};
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 
 const INITIAL_GRILLA = DIAS.map(dia => ({
   dia,
-  horarios: HORARIOS_BASE.map(hora => ({
+  horarios: HORARIOS_POR_DIA[dia].map(hora => ({
     hora,
-    lugares_disponibles: (dia === 'Martes' && hora === '18:00') ? 0 : 
-                         (dia === 'Jueves' && hora === '15:00') ? 1 : 
-                         (dia === 'Viernes' && hora === '20:00') ? 0 : 3
+    lugares_disponibles: 8
   }))
 }));
 
 // Mock Data para Panel de Pagos
-const INITIAL_ALUMNOS = [
-  { id: 'a1', nombre: 'Laura Gómez', plan: 8, ultimo_pago: '10/04/2026', vencimiento: '10/05/2026', estado_pago: 'pagado', clases_restantes: 4 },
-  { id: 'a2', nombre: 'Carlos Ruiz', plan: 12, ultimo_pago: '05/04/2026', vencimiento: '05/05/2026', estado_pago: 'pendiente', clases_restantes: 0 },
-  { id: 'a3', nombre: 'Ana López', plan: 8, ultimo_pago: '15/03/2026', vencimiento: '15/04/2026', estado_pago: 'vencido', clases_restantes: 0 },
-  { id: 'a4', nombre: 'Pedro Martínez', plan: 8, ultimo_pago: '02/05/2026', vencimiento: '02/06/2026', estado_pago: 'pagado', clases_restantes: 7 },
-  { id: 'a5', nombre: 'Lucía Fernández', plan: 12, ultimo_pago: '28/04/2026', vencimiento: '28/05/2026', estado_pago: 'pagado', clases_restantes: 10 },
-];
+const INITIAL_ALUMNOS = [];
 
-export const useMockStore = create((set) => ({
+// Mock Historial de Pagos del Alumno (últimos meses)
+const INITIAL_HISTORIAL_PAGOS = [];
+
+export const useMockStore = create(
+  persist(
+    (set) => ({
   // Alumno
-  userNombre: 'María',
+  userNombre: 'Usuario',
   misTurnos: INITIAL_TURNOS,
-  clasesRestantes: 6,
-  clasesMaximas: 8,
-  mesActual: 'Mayo',
+  clasesRestantes: 0,
+  clasesMaximas: 0,
+  mesActual: new Date().toLocaleString('es-AR', { month: 'long' }),
   infoPago: {
-    vencimiento: '10 de Mayo',
-    monto: '$15.000'
+    estado: 'pendiente', // 'pagado' | 'pendiente'
+    vencimiento: '-',
+    monto: '-',
+    historial: INITIAL_HISTORIAL_PAGOS
   },
   bolsaTurnos: INITIAL_BOLSA,
   creditosRecuperacion: 0,
@@ -114,26 +108,51 @@ export const useMockStore = create((set) => ({
   
   registrarPago: (alumnoId) => set((state) => {
     const hoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const mesActualNombre = new Date().toLocaleString('es-AR', { month: 'long' });
     // Simulamos +1 mes para el vencimiento
     const v = new Date();
     v.setMonth(v.getMonth() + 1);
-    const nuevoVencimiento = v.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const nuevoVencimientoDate = v.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const nuevoVencimientoTexto = `10 de ${v.toLocaleString('es-AR', { month: 'long' })} ${v.getFullYear()}`;
+    const montoPlan = state.alumnosMembresia.find(a => a.id === alumnoId)?.plan === 8 ? 15000 : 20000;
+
+    // Simulamos que cualquier pago registrado actualiza la vista del alumno logueado 
+    // para que la demostración al cliente sea más fluida.
+    let nuevaInfoPago = {
+      ...state.infoPago,
+      estado: 'pagado',
+      vencimiento: nuevoVencimientoTexto,
+      historial: [
+        { 
+          id: `p_new_${Date.now()}`, 
+          fecha: `${new Date().getDate()} de ${mesActualNombre} ${new Date().getFullYear()}`, 
+          monto: `$${montoPlan.toLocaleString('es-AR')}`,
+          mes: mesActualNombre.charAt(0).toUpperCase() + mesActualNombre.slice(1)
+        },
+        ...state.infoPago.historial
+      ]
+    };
 
     return {
+      infoPago: nuevaInfoPago,
       alumnosMembresia: state.alumnosMembresia.map(a => {
         if (a.id === alumnoId) {
           return {
             ...a,
             estado_pago: 'pagado',
             ultimo_pago: hoy,
-            vencimiento: nuevoVencimiento,
+            vencimiento: nuevoVencimientoDate,
             clases_restantes: a.plan // Se resetean las clases al plan elegido
           };
         }
         return a;
       }),
       // Sumar ingresos simulados
-      ingresosMesActual: state.ingresosMesActual + (state.alumnosMembresia.find(a => a.id === alumnoId)?.plan === 8 ? 15000 : 20000)
+      ingresosMesActual: state.ingresosMesActual + montoPlan
     };
-  })
-}));
+  }),
+  }),
+  {
+    name: 'belen-pilates-mock-storage-v3', // bumped to force reload with new schedules
+  }
+));

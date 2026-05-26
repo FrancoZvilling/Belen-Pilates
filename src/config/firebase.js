@@ -1,19 +1,24 @@
-// TODO: Inicializar la app de Firebase cuando se tengan las credenciales.
-// import { initializeApp } from 'firebase/app';
-// import { getAuth } from 'firebase/auth';
-// import { getFirestore } from 'firebase/firestore';
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
+// Your web app's Firebase configuration
 const firebaseConfig = {
-  // apiKey: "TU_API_KEY",
-  // authDomain: "TU_PROYECTO.firebaseapp.com",
-  // projectId: "TU_PROYECTO",
-  // storageBucket: "TU_PROYECTO.appspot.com",
-  // messagingSenderId: "TU_SENDER_ID",
-  // appId: "TU_APP_ID"
+  apiKey: "AIzaSyD2HJu0MHGF7AnkLe0peZGwFIRchkgU_E4",
+  authDomain: "belen-pilates.firebaseapp.com",
+  projectId: "belen-pilates",
+  storageBucket: "belen-pilates.firebasestorage.app",
+  messagingSenderId: "984023521834",
+  appId: "1:984023521834:web:e77c150c41f6d1a89b4153"
 };
 
-// const app = initializeApp(firebaseConfig);
-// export const auth = getAuth(app);
-// export const db = getFirestore(app);
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
 
-export {};
+// Initialize Firebase services
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// Export instances
+export { app, auth, db };

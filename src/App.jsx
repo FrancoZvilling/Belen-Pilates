@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { useAuthStore } from './store/authStore';
 
 // Layout Components
@@ -10,6 +11,7 @@ import Login from './pages/auth/Login';
 // Alumno Pages
 import DashboardAlumno from './pages/alumno/DashboardAlumno';
 import TurnosAlumno from './pages/alumno/TurnosAlumno';
+import PagosAlumno from './pages/alumno/PagosAlumno';
 
 // Admin Pages
 import AsistenciasDiarias from './pages/admin/AsistenciasDiarias';
@@ -44,7 +46,20 @@ const MainRedirect = () => {
 };
 
 function App() {
-  const isAuthenticated = useAuthStore(state => state.isAuthenticated);
+  const { isAuthenticated, isInitializing, initializeAuth } = useAuthStore();
+
+  useEffect(() => {
+    initializeAuth();
+  }, [initializeAuth]);
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+        <div className="w-12 h-12 border-4 border-gray-200 border-t-primary-asistencia rounded-full animate-spin mb-4"></div>
+        <p className="text-gray-500 font-medium animate-pulse">Conectando...</p>
+      </div>
+    );
+  }
 
   return (
     <Router>
@@ -63,6 +78,11 @@ function App() {
           <Route path="/alumno/turnos" element={
             <ProtectedRoute allowedRoles={['alumno']}>
               <TurnosAlumno />
+            </ProtectedRoute>
+          } />
+          <Route path="/alumno/pagos" element={
+            <ProtectedRoute allowedRoles={['alumno']}>
+              <PagosAlumno />
             </ProtectedRoute>
           } />
 

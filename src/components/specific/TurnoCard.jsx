@@ -1,4 +1,4 @@
-import { Calendar, Clock, RefreshCw, XCircle } from 'lucide-react';
+import { Calendar, Clock, RefreshCw, XCircle, CheckCircle, AlertCircle } from 'lucide-react';
 
 export default function TurnoCard({ turno, onCambiar, onCancelar }) {
   // turno: { id, fecha, hora, tipo }
@@ -24,22 +24,34 @@ export default function TurnoCard({ turno, onCambiar, onCancelar }) {
         )}
       </div>
 
-      <div className="flex gap-2 mt-4">
-        <button 
-          onClick={() => onCambiar(turno)}
-          className="flex-1 flex items-center justify-center py-2.5 bg-primary-asistencia text-white font-semibold rounded-lg text-sm transition-transform active:scale-95"
-        >
-          <RefreshCw size={16} className="mr-2" />
-          Cambiar
-        </button>
-        <button 
-          onClick={() => onCancelar(turno)}
-          className="px-4 flex items-center justify-center py-2.5 bg-red-50 text-red-600 font-semibold rounded-lg text-sm transition-colors active:bg-red-100"
-          aria-label="Cancelar turno"
-        >
-          <XCircle size={20} />
-        </button>
-      </div>
+      {turno.isPresente ? (
+        <div className="mt-4 flex items-center justify-center py-2.5 bg-green-50 text-green-700 font-bold rounded-lg text-sm border border-green-100">
+          <CheckCircle size={16} className="mr-2" />
+          Presente Confirmado
+        </div>
+      ) : turno.isAusente ? (
+        <div className="mt-4 flex items-center justify-center py-2.5 bg-orange-50 text-orange-600 font-bold rounded-lg text-sm border border-orange-100">
+          <AlertCircle size={16} className="mr-2" />
+          Ausente
+        </div>
+      ) : (
+        <div className="flex gap-2 mt-4">
+          <button 
+            onClick={() => onCambiar(turno)}
+            className="flex-1 flex items-center justify-center py-2.5 bg-primary-asistencia text-white font-semibold rounded-lg text-sm transition-transform active:scale-95"
+          >
+            <RefreshCw size={16} className="mr-2" />
+            Cambiar
+          </button>
+          <button 
+            onClick={() => onCancelar(turno)}
+            className="px-4 flex items-center justify-center py-2.5 bg-red-50 text-red-600 font-semibold rounded-lg text-sm transition-colors active:bg-red-100"
+            aria-label="Cancelar turno"
+          >
+            <XCircle size={20} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -49,5 +49,20 @@ export default function CamillaCard({ camilla, onMarcarPresente }) {
     );
   }
 
+  if (estado === 'ausente') {
+    return (
+      <div className="bg-orange-50 border-2 border-orange-300 rounded-2xl p-4 flex flex-col justify-between h-32 relative">
+        <div className="absolute top-2 right-2 text-orange-400">
+          <User size={20} />
+        </div>
+
+        <div className="mt-1">
+          <h3 className="font-bold text-gray-500 text-sm truncate leading-tight pr-6">{alumno}</h3>
+          <span className="text-xs font-bold text-orange-500 uppercase tracking-wider mt-1 block">Ausente</span>
+        </div>
+      </div>
+    );
+  }
+
   return null;
 }
