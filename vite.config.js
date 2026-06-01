@@ -9,20 +9,20 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
       manifest: {
-        name: 'Belén Pilates',
-        short_name: 'B Pilates',
+        name: 'Loto Pilates',
+        short_name: 'Loto Pilates',
         description: 'Gestión de turnos y pagos para estudio de Pilates',
         theme_color: '#ffffff',
         icons: [
           {
-            src: 'pwa-192x192.png',
+            src: 'logo.webp',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/webp'
           },
           {
-            src: 'pwa-512x512.png',
+            src: 'logo.webp',
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/webp'
           }
         ]
       }
