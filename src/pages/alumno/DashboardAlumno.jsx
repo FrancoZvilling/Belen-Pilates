@@ -1,72 +1,46 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useMockStore } from '../../store/mockStore';
 import SmartAttendanceButton from '../../components/specific/SmartAttendanceButton';
 import ReportAbsenceButton from '../../components/specific/ReportAbsenceButton';
 import Modal from '../../components/common/Modal';
-import { Bell, Calendar, CreditCard, ChevronRight, LogOut, CheckCircle, AlertCircle } from 'lucide-react';
+import { Bell, Calendar, CreditCard, ChevronRight, LogOut, CheckCircle, AlertCircle, AlertTriangle, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
+import { generarAgendaUsuario } from '../../utils/calendarUtils';
 
 export default function DashboardAlumno() {
   const navigate = useNavigate();
   const logout = useAuthStore(state => state.logout);
-  const { userData } = useAuthStore(state => state);
-  const { 
-    mesActual,
-    infoPago
-  } = useMockStore();
+  const { userData, user } = useAuthStore(state => state);
+  const { mesActual } = useMockStore();
 
   const userNombre = userData?.nombre?.split(' ')[0] || 'Usuario';
   const clasesRestantes = userData?.clases_restantes ?? 0;
   const clasesMaximas = userData?.plan ?? 8;
   
-  const d = new Date();
-  const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
-  const argDate = new Date(utc + (3600000 * -3)); // UTC-3 (Argentina)
-  const currentDayIndex = argDate.getDay(); // 0 (Dom) a 6 (Sab)
-  
-  const diasSemanales = { 'Domingo': 0, 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5, 'Sábado': 6 };
+  const misTurnos = userData ? generarAgendaUsuario(userData, 14) : [];
 
-  let misTurnos = userData?.turnos_fijos?.map((turno, i) => {
-    const diaTurno = diasSemanales[turno.dia];
-    const esHoy = diaTurno === currentDayIndex;
-    const esManana = diaTurno === (currentDayIndex + 1) % 7;
+  // Calcula el estado de pago del alumno
+  const estadoDePago = useMemo(() => {
+    let estado = 'vencido';
+    let diasRestantes = 0;
     
-    let daysDiff = diaTurno - currentDayIndex;
-    if (daysDiff < 0) daysDiff += 7;
-    
-    const turnoDate = new Date(argDate);
-    turnoDate.setDate(turnoDate.getDate() + daysDiff);
-    const fechaIsoString = `${turnoDate.getFullYear()}-${String(turnoDate.getMonth()+1).padStart(2,'0')}-${String(turnoDate.getDate()).padStart(2,'0')}`;
-    
-    const registroHistorial = userData?.historial_asistencias?.find(h => h.fecha === fechaIsoString && h.hora === turno.hora);
-    
-    return {
-      id: i,
-      fechaOriginal: turno.dia,
-      fecha: esHoy ? 'Hoy' : esManana ? 'Mañana' : turno.dia,
-      hora: turno.hora,
-      isPresente: registroHistorial?.estado === 'presente',
-      isAusente: registroHistorial?.estado === 'ausente'
-    };
-  }) || [];
+    if (userData?.vencimiento_pago) {
+      const d = new Date();
+      const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+      const todayDate = new Date(utc + (3600000 * -3));
+      todayDate.setHours(0, 0, 0, 0);
 
-  misTurnos.sort((a, b) => {
-    let weightA = diasSemanales[a.fechaOriginal];
-    let weightB = diasSemanales[b.fechaOriginal];
-    
-    // Si el día ya pasó en esta semana, lo mandamos a la semana que viene sumando 7
-    if (weightA < currentDayIndex) weightA += 7;
-    if (weightB < currentDayIndex) weightB += 7;
-    
-    // Si caen el mismo día, desempatamos por la hora
-    if (weightA === weightB) {
-      return parseInt(a.hora.split(':')[0]) - parseInt(b.hora.split(':')[0]);
+      const venc = new Date(userData.vencimiento_pago + 'T12:00:00Z');
+      const diffTime = venc.getTime() - todayDate.getTime();
+      diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diasRestantes > 5) estado = 'pagado';
+      else if (diasRestantes >= 0) estado = 'pendiente';
     }
-    return weightA - weightB;
-  });
 
-  const [isBolsaModalOpen, setIsBolsaModalOpen] = useState(false);
+    return { estado, diasRestantes, vencimiento: userData?.vencimiento_pago || 'No registrado' };
+  }, [userData]);
 
   // Calcula el porcentaje para la barra circular o lineal
   const porcentaje = ((clasesMaximas - clasesRestantes) / clasesMaximas) * 100;
@@ -93,6 +67,32 @@ export default function DashboardAlumno() {
         </div>
       </header>
 
+      {/* Cartel de Alerta Vencido */}
+      {estadoDePago.estado === 'vencido' && (
+        <div className="px-5 mt-4">
+          <div className="bg-red-50 border border-red-200 p-4 rounded-2xl flex items-start shadow-sm">
+            <XCircle className="text-red-500 mr-3 flex-shrink-0 mt-0.5" size={24} />
+            <div>
+              <h3 className="font-bold text-red-800">Mensualidad Vencida</h3>
+              <p className="text-sm text-red-700 mt-1">Por favor, regularizá el pago de tu plan para evitar demoras en el sistema.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cartel de Alerta Pendiente */}
+      {estadoDePago.estado === 'pendiente' && (
+        <div className="px-5 mt-4">
+          <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-2xl flex items-start shadow-sm">
+            <AlertTriangle className="text-yellow-600 mr-3 flex-shrink-0 mt-0.5" size={24} />
+            <div>
+              <h3 className="font-bold text-yellow-800">Vencimiento Próximo</h3>
+              <p className="text-sm text-yellow-700 mt-1">Tu plan vence en {estadoDePago.diasRestantes} días. Recordá abonar a tiempo.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="px-5 space-y-6 mt-4">
         
         {/* 2. Tarjeta Principal (Estado del Mes) */}
@@ -101,54 +101,72 @@ export default function DashboardAlumno() {
           
           {/* Progress Indicator */}
           <div className="relative w-40 h-40 flex items-center justify-center mb-4">
-            <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 100 100">
-              <circle 
-                cx="50" cy="50" r="40" 
-                fill="transparent" 
-                stroke="#F3F4F6" 
-                strokeWidth="12" 
+            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+              <path
+                className="text-gray-100"
+                strokeWidth="3"
+                stroke="currentColor"
+                fill="none"
+                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
               />
-              <circle 
-                cx="50" cy="50" r="40" 
-                fill="transparent" 
-                stroke="#FF7F50" 
-                strokeWidth="12" 
-                strokeDasharray="251.2" 
-                strokeDashoffset={251.2 - (251.2 * porcentaje) / 100}
-                className="transition-all duration-1000 ease-out"
+              <path
+                className="text-primary transition-all duration-1000 ease-out"
+                strokeWidth="3"
+                strokeDasharray={`${porcentaje}, 100`}
                 strokeLinecap="round"
+                stroke="currentColor"
+                fill="none"
+                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
               />
             </svg>
-            <div className="absolute flex flex-col items-center">
-              <span className="text-4xl font-black text-gray-800">{clasesRestantes}</span>
-              <span className="text-sm font-bold text-gray-400 mt-1">de {clasesMaximas}</span>
+            <div className="absolute flex flex-col items-center justify-center">
+              <span className="text-4xl font-black text-gray-800 tracking-tighter">{clasesRestantes}</span>
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">clases<br/>restantes</span>
             </div>
           </div>
-          <h2 className="text-xl font-bold text-gray-700">clases disponibles</h2>
+
+          <p className="text-gray-500 font-medium text-sm px-4">
+            Te quedan <strong className="text-gray-800">{clasesRestantes}</strong> de <strong className="text-gray-800">{clasesMaximas}</strong> clases de tu plan mensual.
+          </p>
         </section>
 
-        {/* 3. Botón Smart de Asistencia */}
-        <section>
-          <SmartAttendanceButton />
-          <ReportAbsenceButton />
+        {/* 3. Acciones Rápidas Inteligentes */}
+        <section className="space-y-3">
+          <SmartAttendanceButton uid={user?.uid} />
+          <ReportAbsenceButton uid={user?.uid} />
         </section>
 
-        {/* 4. Sección Mis Próximos Turnos (Color: primary-turnos) */}
+        {/* 4. Próximos Turnos */}
         <section>
-          <div className="flex items-center justify-between mb-3 px-1">
-            <h3 className="text-lg font-bold text-gray-800 flex items-center">
-              <Calendar className="mr-2 text-primary-turnos" size={20} />
-              Mis Próximos Turnos
-            </h3>
+          <div className="flex justify-between items-end mb-4">
+            <h2 className="text-xl font-black text-gray-800">Mis Próximos Turnos</h2>
+            <button 
+              onClick={() => navigate('/alumno/turnos')}
+              className="text-sm font-bold text-primary hover:text-opacity-80 flex items-center transition-colors"
+            >
+              Ver todos <ChevronRight size={16} className="ml-1" />
+            </button>
           </div>
           
           <div className="space-y-3">
             {misTurnos.length > 0 ? (
-              misTurnos.map(turno => (
-                <div key={turno.id} className="bg-white rounded-2xl p-4 shadow-sm border-l-4 border-l-primary-turnos flex items-center justify-between">
-                  <div>
-                    <h4 className="font-bold text-gray-800 text-lg">{turno.fecha}</h4>
-                    <span className="text-gray-500 font-medium text-sm">{turno.hora} hs <span className="text-xs text-gray-400 font-normal ml-1">(Turno Fijo)</span></span>
+              misTurnos.slice(0, 3).map((turno) => (
+                <div 
+                  key={turno.id} 
+                  className={`bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center justify-between ${
+                    turno.tipo === 'Fijo' ? 'border-l-4 border-l-primary-turnos' : 'border-l-4 border-l-blue-400'
+                  }`}
+                >
+                  <div className="flex items-center">
+                    <div className="bg-primary-turnos bg-opacity-10 p-3 rounded-full text-primary-turnos mr-4">
+                      <Calendar size={20} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                        {turno.fecha}
+                      </p>
+                      <h4 className="font-black text-gray-800 text-lg">{turno.hora} hs</h4>
+                    </div>
                   </div>
                   {turno.isPresente ? (
                     <span className="bg-green-50 text-green-700 font-bold px-3 py-2 rounded-xl text-xs flex items-center border border-green-100">
@@ -162,10 +180,10 @@ export default function DashboardAlumno() {
                     </span>
                   ) : (
                     <button 
-                      onClick={() => setIsBolsaModalOpen(true)}
+                      onClick={() => navigate('/alumno/turnos')}
                       className="bg-primary-turnos bg-opacity-10 text-blue-600 font-bold px-4 py-2 rounded-xl text-sm active:scale-95 transition-transform"
                     >
-                      Cambiar
+                      Ver
                     </button>
                   )}
                 </div>
@@ -185,22 +203,28 @@ export default function DashboardAlumno() {
           onClick={() => navigate('/alumno/pagos')}
           className="cursor-pointer active:scale-[0.98] transition-transform"
         >
-          <div className="bg-primary-pagos bg-opacity-10 rounded-2xl p-5 border border-primary-pagos border-opacity-30 flex items-center justify-between">
+          <div className={`bg-opacity-10 rounded-2xl p-5 border flex items-center justify-between ${
+            estadoDePago.estado === 'pagado' ? 'bg-green-500 border-green-200 text-green-700' :
+            estadoDePago.estado === 'pendiente' ? 'bg-yellow-500 border-yellow-300 text-yellow-700' :
+            'bg-red-500 border-red-200 text-red-700'
+          }`}>
             <div className="flex items-center space-x-4">
-              <div className="bg-white p-3 rounded-full text-primary-pagos shadow-sm">
+              <div className="bg-white p-3 rounded-full shadow-sm" style={{ color: 'inherit' }}>
                 <CreditCard size={24} />
               </div>
               <div>
-                <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${infoPago.estado === 'pagado' ? 'text-green-700' : 'text-orange-700'}`}>
-                  {infoPago.estado === 'pagado' ? 'Mes Pagado' : 'Mi Próximo Pago'}
+                <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: 'inherit' }}>
+                  {estadoDePago.estado === 'pagado' ? 'Mes al día' : 'Mensualidad'}
                 </p>
-                <h4 className="font-black text-gray-800 text-lg">{infoPago.monto}</h4>
+                <h4 className="font-black text-gray-800 text-lg uppercase tracking-tight">
+                  {estadoDePago.estado}
+                </h4>
                 <p className="text-sm text-gray-600 font-medium font-sans">
-                  {infoPago.estado === 'pagado' ? 'Próx. Venc:' : 'Vence:'} {infoPago.vencimiento}
+                  {estadoDePago.estado === 'vencido' ? 'Venció el' : 'Vence el'}: {estadoDePago.vencimiento}
                 </p>
               </div>
             </div>
-            <button className="text-primary-pagos p-2 transition-transform">
+            <button style={{ color: 'inherit' }} className="p-2 transition-transform">
               <ChevronRight size={24} />
             </button>
           </div>
@@ -208,24 +232,6 @@ export default function DashboardAlumno() {
 
       </div>
 
-      {/* Modal Bolsa de Turnos Vacío */}
-      <Modal 
-        isOpen={isBolsaModalOpen} 
-        onClose={() => setIsBolsaModalOpen(false)}
-        title="Bolsa de Turnos"
-      >
-        <div className="py-10 text-center">
-          <Calendar size={48} className="mx-auto text-gray-300 mb-4" />
-          <h3 className="text-xl font-bold text-gray-800 mb-2">Próximamente</h3>
-          <p className="text-gray-500">Aquí podrás ver y seleccionar los turnos disponibles para intercambiar.</p>
-          <button 
-            onClick={() => setIsBolsaModalOpen(false)}
-            className="mt-6 font-bold text-primary-turnos"
-          >
-            Volver
-          </button>
-        </div>
-      </Modal>
 
       <style>{`
         @keyframes wave {

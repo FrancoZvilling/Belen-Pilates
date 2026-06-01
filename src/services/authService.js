@@ -29,19 +29,26 @@ export const loginWithGoogle = async () => {
       }
 
       const preData = preRegistroSnap.data();
+      const rolAsignado = preData.rol || 'alumno';
 
       // Si está, creamos su perfil real con los datos pre-cargados
-      await setDoc(userRef, {
+      const userDocData = {
         nombre: preData.nombre || user.displayName,
         email: emailId,
         telefono: preData.telefono || '',
-        rol: 'alumno',
-        plan: preData.plan || 8,
-        clases_restantes: preData.plan || 8,
-        turnos_fijos: preData.turnosFijos || [],
+        rol: rolAsignado,
         estado: 'activo',
         fecha_registro: new Date().toISOString()
-      });
+      };
+
+      // Solo los alumnos tienen plan, clases y turnos
+      if (rolAsignado === 'alumno') {
+        userDocData.plan = preData.plan || 8;
+        userDocData.clases_restantes = preData.plan || 8;
+        userDocData.turnos_fijos = preData.turnosFijos || [];
+      }
+
+      await setDoc(userRef, userDocData);
 
       // Borrar el ticket de pre-registro
       await deleteDoc(preRegistroRef);
@@ -50,7 +57,7 @@ export const loginWithGoogle = async () => {
         uid: user.uid,
         nombre: preData.nombre || user.displayName,
         email: emailId,
-        role: 'alumno'
+        role: rolAsignado
       };
       // Si ya existe en usuarios, verificamos que no esté inactivo
       const userData = userSnap.data();
@@ -115,7 +122,6 @@ export const registerWithEmail = async (email, password, nombre) => {
   try {
     const emailId = email.trim().toLowerCase();
 
-    // 1. Verificamos SIEMPRE primero en pre_registros ANTES de crear el usuario de Auth
     const preRegistroRef = doc(db, 'pre_registros', emailId);
     const preRegistroSnap = await getDoc(preRegistroRef);
 
@@ -125,7 +131,8 @@ export const registerWithEmail = async (email, password, nombre) => {
       throw error;
     }
 
-    const preData = preRegistroSnap.data();
+    const preData = preRegistroSnap.exists() ? preRegistroSnap.data() : { nombre: nombre };
+    const rolAsignado = preData.rol || 'alumno';
 
     // 2. Si está invitado, le creamos la cuenta en Authentication
     const result = await createUserWithEmailAndPassword(auth, email, password);
@@ -133,17 +140,23 @@ export const registerWithEmail = async (email, password, nombre) => {
 
     // 3. Crear usuario en Firestore
     const userRef = doc(db, 'usuarios', user.uid);
-    await setDoc(userRef, {
+    const userDocData = {
       nombre: nombre || preData.nombre,
       email: emailId,
       telefono: preData.telefono || '',
-      rol: 'alumno',
-      plan: preData.plan || 8,
-      clases_restantes: preData.plan || 8,
-      turnos_fijos: preData.turnosFijos || [],
+      rol: rolAsignado,
       estado: 'activo',
       fecha_registro: new Date().toISOString()
-    });
+    };
+
+    // Solo los alumnos tienen plan, clases y turnos
+    if (rolAsignado === 'alumno') {
+      userDocData.plan = preData.plan || 8;
+      userDocData.clases_restantes = preData.plan || 8;
+      userDocData.turnos_fijos = preData.turnos_fijos || preData.turnosFijos || [];
+    }
+
+    await setDoc(userRef, userDocData);
 
     // 4. Borrar el pre-registro
     await deleteDoc(preRegistroRef);
@@ -152,7 +165,7 @@ export const registerWithEmail = async (email, password, nombre) => {
       uid: user.uid,
       nombre: nombre || preData.nombre,
       email: emailId,
-      role: 'alumno'
+      role: rolAsignado
     };
   } catch (error) {
     console.error("Error en registro con Email:", error);

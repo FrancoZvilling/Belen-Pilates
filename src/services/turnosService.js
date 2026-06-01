@@ -1,54 +1,127 @@
-import { doc, runTransaction } from 'firebase/firestore';
+import { doc, runTransaction, writeBatch, collection, getDoc, setDoc } from 'firebase/firestore';
 // import { db } from '../config/firebase'; // Uncomment when firebase is configured
 
 /**
- * Intercambia un turno por otro.
+ * Cancela una clase con anticipación y otorga 1 crédito.
+ * @param {Object} db - Firestore
+ * @param {string} uid - ID del alumno
+ * @param {string} idTurno - ID de la clase en formato "YYYY-MM-DD_HH:MM"
+ */
+export const cancelarClaseAnticipada = async (db, uid, idTurno) => {
+  const userRef = doc(db, 'usuarios', uid);
+  try {
+    const result = await runTransaction(db, async (transaction) => {
+      const userDoc = await transaction.get(userRef);
+      if (!userDoc.exists()) throw new Error("Usuario no encontrado");
+
+      const data = userDoc.data();
+      const creditos = data.creditos_recuperacion || 0;
+      const creditosUsados = data.creditos_usados_este_mes || 0;
+      const clasesRestantes = data.clases_restantes ?? 0;
+      const canceladas = data.clases_canceladas || [];
+      const esExtra = data.clases_extra?.includes(idTurno);
+
+      if (!esExtra && clasesRestantes <= 0) {
+        throw new Error("No tienes clases restantes para descontar.");
+      }
+
+      if (canceladas.includes(idTurno)) {
+        throw new Error("Ya cancelaste esta clase.");
+      }
+
+      let otorgarCredito = false;
+      let nuevosCreditosUsados = creditosUsados;
+      if (creditosUsados < 2) {
+        otorgarCredito = true;
+        nuevosCreditosUsados += 1;
+      }
+
+      const updateData = {
+        creditos_recuperacion: creditos + (otorgarCredito ? 1 : 0),
+        creditos_usados_este_mes: nuevosCreditosUsados,
+        clases_canceladas: [...canceladas, idTurno]
+      };
+
+      if (!esExtra) {
+        updateData.clases_restantes = clasesRestantes - 1;
+      }
+
+      transaction.update(userRef, updateData);
+      return otorgarCredito;
+    });
+    return { success: true, otorgarCredito: result };
+  } catch (error) {
+    console.error("Error al cancelar anticipadamente:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Recupera una clase usando un crédito disponible.
+ * @param {Object} db - Firestore
+ * @param {string} uid - ID del alumno
+ * @param {string} idTurnoDestino - ID de la clase elegida "YYYY-MM-DD_HH:MM"
+ */
+export const recuperarClase = async (db, uid, idTurnoDestino) => {
+  const userRef = doc(db, 'usuarios', uid);
+  try {
+    await runTransaction(db, async (transaction) => {
+      const userDoc = await transaction.get(userRef);
+      if (!userDoc.exists()) throw new Error("Usuario no encontrado");
+
+      const data = userDoc.data();
+      const creditos = data.creditos_recuperacion || 0;
+      const extras = data.clases_extra || [];
+
+      if (creditos <= 0) {
+        throw new Error("No tienes créditos de recuperación.");
+      }
+      if (extras.includes(idTurnoDestino)) {
+        throw new Error("Ya estás anotado en esta clase.");
+      }
+
+      transaction.update(userRef, {
+        creditos_recuperacion: creditos - 1,
+        clases_extra: [...extras, idTurnoDestino]
+      });
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("Error al recuperar clase:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Intercambia un turno sin modificar los créditos (Cancela el viejo y toma el nuevo a la vez).
  * @param {Object} db - Instancia de Firestore
  * @param {string} uid - ID del usuario
- * @param {string} idSesionNueva - ID de la sesión que quiere tomar
- * @param {string} idSesionVieja - ID de la sesión que va a dejar
+ * @param {string} idTurnoDestino - ID del nuevo turno "YYYY-MM-DD_HH:MM"
+ * @param {string} idTurnoOrigen - ID del turno viejo "YYYY-MM-DD_HH:MM"
  */
-export const intercambiarTurno = async (db, uid, idSesionNueva, idSesionVieja) => {
+export const intercambiarTurno = async (db, uid, idTurnoDestino, idTurnoOrigen) => {
   const userRef = doc(db, 'usuarios', uid);
-  const sesionNuevaRef = doc(db, 'sesiones', idSesionNueva);
-  const sesionViejaRef = doc(db, 'sesiones', idSesionVieja);
 
   try {
     await runTransaction(db, async (transaction) => {
       const userDoc = await transaction.get(userRef);
-      const sesionNuevaDoc = await transaction.get(sesionNuevaRef);
-      const sesionViejaDoc = await transaction.get(sesionViejaRef);
+      if (!userDoc.exists()) throw new Error("Usuario no encontrado");
 
-      if (!userDoc.exists() || !sesionNuevaDoc.exists() || !sesionViejaDoc.exists()) {
-        throw new Error("Uno de los documentos no existe");
+      const data = userDoc.data();
+      const canceladas = data.clases_canceladas || [];
+      const extras = data.clases_extra || [];
+
+      if (canceladas.includes(idTurnoOrigen)) {
+        throw new Error("Ya cancelaste el turno de origen anteriormente.");
+      }
+      if (extras.includes(idTurnoDestino)) {
+        throw new Error("Ya estás anotado en el turno de destino.");
       }
 
-      const sesionNuevaData = sesionNuevaDoc.data();
-      const userProximosTurnos = userDoc.data().proximos_turnos || [];
-      const alumnosAnotadosNueva = sesionNuevaData.alumnos_anotados || [];
-
-      // 1. Validar que id_sesion_nueva tenga cupo
-      const capacidadMax = sesionNuevaData.capacidad_max || 8;
-      if (alumnosAnotadosNueva.length >= capacidadMax) {
-        throw new Error("La sesión nueva ya está llena");
-      }
-
-      // 2. Remover al UID del alumno de alumnos_anotados en id_sesion_a_abandonar
-      const alumnosAnotadosVieja = sesionViejaDoc.data().alumnos_anotados || [];
-      const nuevosAnotadosVieja = alumnosAnotadosVieja.filter(id => id !== uid);
-      transaction.update(sesionViejaRef, { alumnos_anotados: nuevosAnotadosVieja });
-
-      // 3. Agregar al UID del alumno en alumnos_anotados de id_sesion_nueva
-      transaction.update(sesionNuevaRef, { 
-        alumnos_anotados: [...alumnosAnotadosNueva, uid] 
+      transaction.update(userRef, {
+        clases_canceladas: [...canceladas, idTurnoOrigen],
+        clases_extra: [...extras, idTurnoDestino]
       });
-
-      // 4. Actualizar el array proximos_turnos en el documento del usuario
-      const nuevosProximosTurnos = userProximosTurnos.filter(id => id !== idSesionVieja);
-      nuevosProximosTurnos.push(idSesionNueva);
-      transaction.update(userRef, { proximos_turnos: nuevosProximosTurnos });
-
-      // Nota: No se descuentan clases del contador.
     });
     return { success: true };
   } catch (error) {
@@ -104,8 +177,9 @@ export const registrarAsistenciaAlumno = async (db, uid, fechaIsoString, horaTur
 
       const data = userDoc.data();
       const clasesRestantes = data.clases_restantes ?? 0;
+      const esExtra = data.clases_extra?.includes(`${fechaIsoString}_${horaTurno}`);
       
-      if (clasesRestantes <= 0) {
+      if (!esExtra && clasesRestantes <= 0) {
         throw new Error("No tienes clases restantes para descontar.");
       }
 
@@ -124,10 +198,15 @@ export const registrarAsistenciaAlumno = async (db, uid, fechaIsoString, horaTur
         timestamp: new Date().toISOString()
       };
 
-      transaction.update(userRef, {
-        clases_restantes: clasesRestantes - 1,
+      const updateData = {
         historial_asistencias: [...historial, nuevoRegistro]
-      });
+      };
+
+      if (!esExtra) {
+        updateData.clases_restantes = clasesRestantes - 1;
+      }
+
+      transaction.update(userRef, updateData);
     });
     return { success: true };
   } catch (error) {
@@ -149,6 +228,13 @@ export const registrarInasistenciaAlumno = async (db, uid, fechaIsoString, horaT
 
       const data = userDoc.data();
       const creditos = data.creditos_recuperacion ?? 0;
+      const creditosUsados = data.creditos_usados_este_mes || 0;
+      const clasesRestantes = data.clases_restantes ?? 0;
+      const esExtra = data.clases_extra?.includes(`${fechaIsoString}_${horaTurno}`);
+
+      if (!esExtra && clasesRestantes <= 0) {
+        throw new Error("No tienes clases restantes para descontar.");
+      }
 
       const historial = data.historial_asistencias || [];
       
@@ -165,11 +251,24 @@ export const registrarInasistenciaAlumno = async (db, uid, fechaIsoString, horaT
         timestamp: new Date().toISOString()
       };
 
-      // Nota: NO restamos clases_restantes porque la inasistencia se canjea después.
-      transaction.update(userRef, {
-        creditos_recuperacion: creditos + 1,
+      let otorgarCredito = false;
+      let nuevosCreditosUsados = creditosUsados;
+      if (creditosUsados < 2) {
+        otorgarCredito = true;
+        nuevosCreditosUsados += 1;
+      }
+
+      const updateData = {
+        creditos_recuperacion: creditos + (otorgarCredito ? 1 : 0),
+        creditos_usados_este_mes: nuevosCreditosUsados,
         historial_asistencias: [...historial, nuevoRegistro]
-      });
+      };
+
+      if (!esExtra) {
+        updateData.clases_restantes = clasesRestantes - 1;
+      }
+
+      transaction.update(userRef, updateData);
     });
     return { success: true };
   } catch (error) {
@@ -211,6 +310,162 @@ export const cancelarConAnticipacion = async (db, uid, idSesion) => {
     return { success: true };
   } catch (error) {
     console.error("Error al cancelar turno:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Barrido Perezoso (Lazy Sweep) para inasistencias automáticas.
+ * Busca clases pasadas (más de 1h) en el día actual que no tengan presente ni ausente,
+ * y les asigna "ausente" descontando la clase sin dar créditos.
+ */
+export const ejecutarBarridoInasistencias = async (db, usuariosActivos) => {
+  const d = new Date();
+  const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+  const argDate = new Date(utc + (3600000 * -3));
+
+  const dayIndex = argDate.getDay();
+  const diasMapLargo = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  const todayStringLargo = diasMapLargo[dayIndex];
+  
+  const fechaIsoString = `${argDate.getFullYear()}-${String(argDate.getMonth()+1).padStart(2,'0')}-${String(argDate.getDate()).padStart(2,'0')}`;
+  const currentHourDecimal = argDate.getHours() + (argDate.getMinutes() / 60);
+
+  const batch = writeBatch(db);
+  let modificaciones = 0;
+
+  for (const usuario of usuariosActivos) {
+    if (usuario.rol !== 'alumno') continue;
+
+    const clasesDeHoy = usuario.turnos_fijos?.filter(t => t.dia === todayStringLargo) || [];
+    if (clasesDeHoy.length === 0) continue;
+
+    let clasesRestantes = usuario.clases_restantes ?? 0;
+    let historial = [...(usuario.historial_asistencias || [])];
+    let userModified = false;
+
+    for (const clase of clasesDeHoy) {
+      const classHourInt = parseInt(clase.hora.split(':')[0]);
+      
+      // Si ya pasó 1 HORA desde el comienzo de la clase
+      if (currentHourDecimal >= classHourInt + 1) {
+        
+        // Verificar si ya hay un registro (presente o ausente) para esta clase hoy
+        const yaRegistrado = historial.some(h => h.fecha === fechaIsoString && h.hora === clase.hora);
+        
+        if (!yaRegistrado && clasesRestantes > 0) {
+          // Si no está registrado y tiene clases, le clavamos el ausente automático
+          historial.push({
+            fecha: fechaIsoString,
+            hora: clase.hora,
+            estado: 'ausente',
+            motivo: 'automatico_lazy_sweep',
+            timestamp: new Date().toISOString()
+          });
+          clasesRestantes -= 1;
+          userModified = true;
+        }
+      }
+    }
+
+    if (userModified) {
+      const userRef = doc(db, 'usuarios', usuario.id);
+      batch.update(userRef, {
+        clases_restantes: clasesRestantes,
+        historial_asistencias: historial
+      });
+      modificaciones++;
+    }
+  }
+
+  if (modificaciones > 0) {
+    try {
+      await batch.commit();
+      console.log(`[Lazy Sweep] Se aplicaron ${modificaciones} inasistencias automáticas.`);
+    } catch (error) {
+      console.error("[Lazy Sweep] Error al ejecutar el batch:", error);
+    }
+  }
+};
+
+// ============================================================================
+// MODULO DE PAGOS Y FACTURACIÓN
+// ============================================================================
+
+/**
+ * Registra un pago para un alumno, extiende su vencimiento 30 días y guarda el recibo.
+ * @param {Object} db - Firestore
+ * @param {string} uid - ID del alumno
+ * @param {number} monto - Monto abonado
+ * @param {string} nombreAdmin - Nombre del admin que cobra
+ */
+export const registrarPagoAlumno = async (db, uid, monto, nombreAdmin = "Admin") => {
+  const userRef = doc(db, 'usuarios', uid);
+  const nuevoPagoRef = doc(collection(db, 'pagos_historial'));
+
+  try {
+    await runTransaction(db, async (transaction) => {
+      const userDoc = await transaction.get(userRef);
+      if (!userDoc.exists()) throw new Error("Usuario no encontrado");
+
+      const data = userDoc.data();
+      let nuevoVencimiento = new Date();
+      
+      // Si ya tiene vencimiento y es futuro, le sumamos 30 días a ese. Si está vencido, le sumamos 30 días a HOY.
+      if (data.vencimiento_pago) {
+        const vencimientoActual = new Date(data.vencimiento_pago + 'T12:00:00Z');
+        if (vencimientoActual > new Date()) {
+          nuevoVencimiento = vencimientoActual;
+        }
+      }
+      
+      nuevoVencimiento.setDate(nuevoVencimiento.getDate() + 30);
+      
+      // Formato YYYY-MM-DD
+      const mesAbonadoStr = `${nuevoVencimiento.getFullYear()}-${String(nuevoVencimiento.getMonth() + 1).padStart(2, '0')}-${String(nuevoVencimiento.getDate()).padStart(2, '0')}`;
+
+      // 1. Actualizar usuario
+      // Al pagar se reinician las clases restantes. Asumimos 8 o 12 según su plan
+      const clasesNuevas = data.plan || 8; 
+
+      transaction.update(userRef, {
+        vencimiento_pago: mesAbonadoStr,
+        clases_restantes: clasesNuevas,
+        creditos_recuperacion: 0,
+        creditos_usados_este_mes: 0,
+        clases_canceladas: [],
+        clases_extra: []
+      });
+
+      // 2. Registrar el historial financiero
+      transaction.set(nuevoPagoRef, {
+        alumnoId: uid,
+        alumnoNombre: data.nombre,
+        monto: monto,
+        fecha_pago: new Date().toISOString(),
+        vencimiento_otorgado: mesAbonadoStr,
+        registrado_por: nombreAdmin
+      });
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("Error al registrar pago:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Actualiza los precios globales de los planes.
+ * @param {Object} db - Firestore
+ * @param {Object} nuevosPrecios - { plan_8_clases: 15000, plan_12_clases: 20000 }
+ */
+export const actualizarPrecios = async (db, nuevosPrecios) => {
+  const configRef = doc(db, 'configuracion', 'precios');
+  try {
+    await setDoc(configRef, nuevosPrecios, { merge: true });
+    return { success: true };
+  } catch (error) {
+    console.error("Error al actualizar precios:", error);
     return { success: false, error: error.message };
   }
 };

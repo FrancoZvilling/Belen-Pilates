@@ -25,7 +25,7 @@ export default function CamillaCard({ camilla, onMarcarPresente }) {
         </div>
 
         <button 
-          onClick={() => onMarcarPresente(camilla.id)}
+          onClick={() => onMarcarPresente(camilla.usuarioId)}
           className="w-full mt-2 bg-primary-turnos text-white text-xs font-bold py-2 rounded-xl active:scale-95 transition-transform"
         >
           Marcar Presente
@@ -59,6 +59,21 @@ export default function CamillaCard({ camilla, onMarcarPresente }) {
         <div className="mt-1">
           <h3 className="font-bold text-gray-500 text-sm truncate leading-tight pr-6">{alumno}</h3>
           <span className="text-xs font-bold text-orange-500 uppercase tracking-wider mt-1 block">Ausente</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (estado === 'ausente_pago') {
+    return (
+      <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-4 flex flex-col justify-between h-32 relative">
+        <div className="absolute top-2 right-2 text-red-400">
+          <User size={20} />
+        </div>
+
+        <div className="mt-1">
+          <h3 className="font-bold text-red-500 text-sm truncate leading-tight pr-6">{alumno}</h3>
+          <span className="text-xs font-bold text-red-600 uppercase tracking-wider mt-1 block leading-tight">Ausente<br/>(Falta Pago)</span>
         </div>
       </div>
     );

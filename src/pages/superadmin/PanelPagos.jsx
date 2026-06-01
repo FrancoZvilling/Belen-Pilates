@@ -1,27 +1,76 @@
-import { useState } from 'react';
-import { useMockStore } from '../../store/mockStore';
-import { DollarSign, AlertTriangle, XCircle, Search, Filter, CreditCard, CheckCircle, LogOut, Users } from 'lucide-react';
-import Modal from '../../components/common/Modal';
+import { useState, useMemo } from 'react';
+import { useAdminStore } from '../../store/adminStore';
 import { useAuthStore } from '../../store/authStore';
+import { db } from '../../config/firebase';
+import { registrarPagoAlumno, actualizarPrecios } from '../../services/turnosService';
+import { DollarSign, AlertTriangle, XCircle, Search, Filter, CreditCard, CheckCircle, LogOut, Settings, Users } from 'lucide-react';
+import Modal from '../../components/common/Modal';
 
 export default function PanelPagos() {
   const logout = useAuthStore(state => state.logout);
-  const { alumnosMembresia, ingresosMesActual, registrarPago } = useMockStore();
+  const { usuarios, pagosHistorial, precios } = useAdminStore();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('todos');
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  // Estado del Modal de Pago
+  // Modal de Pago
   const [isPagoModalOpen, setIsPagoModalOpen] = useState(false);
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState(null);
-  const [medioPago, setMedioPago] = useState('efectivo');
 
-  // Derived Stats
-  const pendientesCount = alumnosMembresia.filter(a => a.estado_pago === 'pendiente').length;
-  const vencidosCount = alumnosMembresia.filter(a => a.estado_pago === 'vencido').length;
+  // Modal de Configuracion
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [nuevoPrecio8, setNuevoPrecio8] = useState(precios?.plan_8_clases || 0);
+  const [nuevoPrecio12, setNuevoPrecio12] = useState(precios?.plan_12_clases || 0);
 
-  // Filtrado de alumnos
-  const alumnosFiltrados = alumnosMembresia.filter(a => {
+  // Calcular fechas para filtros de mes
+  const d = new Date();
+  const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+  const todayDate = new Date(utc + (3600000 * -3));
+  todayDate.setHours(0, 0, 0, 0);
+
+  const mesActualNumber = todayDate.getMonth();
+  const anioActualNumber = todayDate.getFullYear();
+
+  // Stats y Mapeo Dinamico
+  const alumnosProcesados = useMemo(() => {
+    return usuarios.filter(u => u.rol === 'alumno').map(u => {
+      let estado = 'vencido';
+      let diasRestantes = 0;
+      
+      if (u.vencimiento_pago) {
+        // Asume formato "YYYY-MM-DD"
+        const venc = new Date(u.vencimiento_pago + 'T12:00:00Z');
+        const diffTime = venc.getTime() - todayDate.getTime();
+        diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diasRestantes > 5) estado = 'pagado';
+        else if (diasRestantes >= 0) estado = 'pendiente';
+      }
+
+      return {
+        ...u,
+        estado_pago: estado,
+        diasRestantes
+      };
+    });
+  }, [usuarios, todayDate]);
+
+  const pendientesCount = alumnosProcesados.filter(a => a.estado_pago === 'pendiente').length;
+  const vencidosCount = alumnosProcesados.filter(a => a.estado_pago === 'vencido').length;
+
+  const totalCobrado = useMemo(() => {
+    return pagosHistorial.reduce((acc, pago) => {
+      const pagoDate = new Date(pago.fecha_pago);
+      if (pagoDate.getMonth() === mesActualNumber && pagoDate.getFullYear() === anioActualNumber) {
+        return acc + (pago.monto || 0);
+      }
+      return acc;
+    }, 0);
+  }, [pagosHistorial, mesActualNumber, anioActualNumber]);
+
+  // Filtrado final
+  const alumnosFiltrados = alumnosProcesados.filter(a => {
     const matchesSearch = a.nombre.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'todos' || a.estado_pago === filterStatus;
     return matchesSearch && matchesStatus;
@@ -32,11 +81,32 @@ export default function PanelPagos() {
     setIsPagoModalOpen(true);
   };
 
-  const handleConfirmarPago = () => {
+  const handleConfirmarPago = async () => {
     if (alumnoSeleccionado) {
-      registrarPago(alumnoSeleccionado.id);
-      setIsPagoModalOpen(false);
-      setAlumnoSeleccionado(null);
+      setIsProcessing(true);
+      const montoAcobrar = (alumnoSeleccionado.plan === 12) ? precios.plan_12_clases : precios.plan_8_clases;
+      const res = await registrarPagoAlumno(db, alumnoSeleccionado.id, montoAcobrar, "SuperAdmin");
+      setIsProcessing(false);
+      if (res.success) {
+        setIsPagoModalOpen(false);
+        setAlumnoSeleccionado(null);
+      } else {
+        alert("Error al registrar pago: " + res.error);
+      }
+    }
+  };
+
+  const handleGuardarConfig = async () => {
+    setIsProcessing(true);
+    const res = await actualizarPrecios(db, {
+      plan_8_clases: parseInt(nuevoPrecio8),
+      plan_12_clases: parseInt(nuevoPrecio12)
+    });
+    setIsProcessing(false);
+    if (res.success) {
+      setIsConfigModalOpen(false);
+    } else {
+      alert("Error al guardar precios: " + res.error);
     }
   };
 
@@ -63,12 +133,24 @@ export default function PanelPagos() {
             <p className="text-sm font-semibold text-gray-500 mt-1">Gestión financiera</p>
           </div>
         </div>
-        <button 
-          onClick={logout}
-          className="p-2 bg-red-50 rounded-full text-red-500 active:scale-95 transition-transform"
-        >
-          <LogOut size={24} />
-        </button>
+        <div className="flex space-x-2">
+          <button 
+            onClick={() => {
+              setNuevoPrecio8(precios?.plan_8_clases || 0);
+              setNuevoPrecio12(precios?.plan_12_clases || 0);
+              setIsConfigModalOpen(true);
+            }}
+            className="p-2 bg-gray-100 rounded-full text-gray-600 active:scale-95 transition-transform"
+          >
+            <Settings size={24} />
+          </button>
+          <button 
+            onClick={logout}
+            className="p-2 bg-red-50 rounded-full text-red-500 active:scale-95 transition-transform"
+          >
+            <LogOut size={24} />
+          </button>
+        </div>
       </header>
 
       <div className="px-5 mt-6 space-y-6">
@@ -80,8 +162,8 @@ export default function PanelPagos() {
               <DollarSign size={28} />
             </div>
             <div>
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Cobrado</p>
-              <h2 className="text-2xl font-black text-gray-800">${ingresosMesActual.toLocaleString('es-AR')}</h2>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Mes Actual</p>
+              <h2 className="text-2xl font-black text-gray-800">${totalCobrado.toLocaleString('es-AR')}</h2>
             </div>
           </div>
 
@@ -90,7 +172,7 @@ export default function PanelPagos() {
               <AlertTriangle size={28} />
             </div>
             <div>
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Pendientes</p>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Pendientes (Próximos a vencer)</p>
               <h2 className="text-2xl font-black text-gray-800">{pendientesCount} alumnos</h2>
             </div>
           </div>
@@ -141,7 +223,6 @@ export default function PanelPagos() {
                 <tr className="bg-gray-50 border-b border-gray-100">
                   <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Alumno</th>
                   <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Plan</th>
-                  <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Último Pago</th>
                   <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Vencimiento</th>
                   <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Estado</th>
                   <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Acción</th>
@@ -150,7 +231,7 @@ export default function PanelPagos() {
               <tbody className="divide-y divide-gray-100">
                 {alumnosFiltrados.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="p-12 text-center">
+                    <td colSpan="5" className="p-12 text-center">
                       <Users className="mx-auto text-gray-300 mb-3" size={40} />
                       <p className="font-bold text-gray-600">No hay alumnos registrados</p>
                       <p className="text-sm text-gray-400 mt-1">Todavía no hay alumnos cargados en el sistema o no coinciden con la búsqueda.</p>
@@ -160,9 +241,8 @@ export default function PanelPagos() {
                   alumnosFiltrados.map((alumno) => (
                     <tr key={alumno.id} className="hover:bg-gray-50 transition-colors">
                       <td className="p-4 font-bold text-gray-800">{alumno.nombre}</td>
-                      <td className="p-4 text-sm text-gray-600 font-semibold">{alumno.plan} clases</td>
-                      <td className="p-4 text-sm text-gray-500">{alumno.ultimo_pago}</td>
-                      <td className="p-4 text-sm font-semibold text-gray-700">{alumno.vencimiento}</td>
+                      <td className="p-4 text-sm text-gray-600 font-semibold">{alumno.plan || 8} clases</td>
+                      <td className="p-4 text-sm font-semibold text-gray-700">{alumno.vencimiento_pago || 'No registrado'}</td>
                       <td className="p-4">
                         <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusColor(alumno.estado_pago)}`}>
                           {alumno.estado_pago}
@@ -192,61 +272,104 @@ export default function PanelPagos() {
 
       </div>
 
-      {/* Modal de Registro de Pago */}
+      {/* Modal de Pago */}
       <Modal 
         isOpen={isPagoModalOpen} 
         onClose={() => setIsPagoModalOpen(false)}
         title="Registrar Pago"
       >
         {alumnoSeleccionado && (
-          <div className="space-y-6 pt-2">
-            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-              <h3 className="font-bold text-gray-800 text-lg">{alumnoSeleccionado.nombre}</h3>
-              <p className="text-sm text-gray-500 mt-1">
-                Plan seleccionado: <span className="font-bold text-gray-700">{alumnoSeleccionado.plan} clases</span>
+          <div className="py-2 space-y-5">
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+              <p className="text-sm text-gray-500 mb-1">Alumno</p>
+              <p className="font-bold text-lg text-gray-800">{alumnoSeleccionado.nombre}</p>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex justify-between items-center">
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Plan</p>
+                <p className="font-bold text-gray-800">{alumnoSeleccionado.plan || 8} Clases</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-gray-500 mb-1">Monto a cobrar</p>
+                <p className="font-black text-2xl text-primary-pagos">
+                  ${(alumnoSeleccionado.plan === 12 ? precios?.plan_12_clases : precios?.plan_8_clases)?.toLocaleString('es-AR')}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-start">
+              <CheckCircle className="text-blue-500 mt-0.5 mr-3 flex-shrink-0" size={20} />
+              <p className="text-sm text-blue-800 font-medium">
+                Al confirmar, el sistema sumará <span className="font-bold">30 días</span> al vencimiento del alumno y reiniciará sus clases disponibles.
               </p>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Monto a Cobrar</label>
-              <div className="relative">
-                <DollarSign className="absolute left-3 top-3.5 text-gray-400" size={20} />
-                <input 
-                  type="text" 
-                  readOnly
-                  value={alumnoSeleccionado.plan === 8 ? '15.000' : '20.000'}
-                  className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-800"
-                />
-              </div>
+            <div className="pt-4 flex gap-3">
+              <button 
+                onClick={() => setIsPagoModalOpen(false)}
+                className="flex-1 py-3 text-gray-600 font-bold rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors"
+                disabled={isProcessing}
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleConfirmarPago}
+                className="flex-1 py-3 bg-primary-pagos text-white font-bold rounded-xl hover:bg-opacity-90 transition-colors"
+                disabled={isProcessing}
+              >
+                {isProcessing ? 'Procesando...' : 'Confirmar Pago'}
+              </button>
             </div>
-
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Medio de Pago</label>
-              <div className="grid grid-cols-2 gap-3">
-                <button 
-                  onClick={() => setMedioPago('efectivo')}
-                  className={`py-3 rounded-xl border-2 font-bold text-sm transition-colors ${medioPago === 'efectivo' ? 'border-primary-pagos bg-primary-pagos bg-opacity-10 text-primary-pagos' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
-                >
-                  Efectivo
-                </button>
-                <button 
-                  onClick={() => setMedioPago('transferencia')}
-                  className={`py-3 rounded-xl border-2 font-bold text-sm transition-colors ${medioPago === 'transferencia' ? 'border-primary-pagos bg-primary-pagos bg-opacity-10 text-primary-pagos' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
-                >
-                  Transferencia
-                </button>
-              </div>
-            </div>
-
-            <button 
-              onClick={handleConfirmarPago}
-              className="w-full mt-4 bg-primary-pagos text-white py-4 rounded-xl font-bold shadow-lg active:scale-95 transition-transform flex justify-center items-center"
-            >
-              <CreditCard size={20} className="mr-2" />
-              Confirmar Pago y Resetear Clases
-            </button>
           </div>
         )}
+      </Modal>
+
+      {/* Modal de Configuración */}
+      <Modal 
+        isOpen={isConfigModalOpen} 
+        onClose={() => setIsConfigModalOpen(false)}
+        title="Configuración de Precios"
+      >
+        <div className="py-2 space-y-5">
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">Precio Plan 8 Clases (2x sem)</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <DollarSign className="h-5 w-5 text-gray-400" />
+              </div>
+              <input
+                type="number"
+                value={nuevoPrecio8}
+                onChange={(e) => setNuevoPrecio8(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-pagos outline-none"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">Precio Plan 12 Clases (3x sem)</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <DollarSign className="h-5 w-5 text-gray-400" />
+              </div>
+              <input
+                type="number"
+                value={nuevoPrecio12}
+                onChange={(e) => setNuevoPrecio12(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-pagos outline-none"
+              />
+            </div>
+          </div>
+          <div className="pt-4">
+            <button 
+              onClick={handleGuardarConfig}
+              className="w-full py-3 bg-primary-pagos text-white font-bold rounded-xl hover:bg-opacity-90 transition-colors"
+              disabled={isProcessing}
+            >
+              {isProcessing ? 'Guardando...' : 'Guardar Precios'}
+            </button>
+          </div>
+        </div>
       </Modal>
 
     </div>

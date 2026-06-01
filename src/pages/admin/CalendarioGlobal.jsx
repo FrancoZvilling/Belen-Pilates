@@ -70,9 +70,18 @@ export default function CalendarioGlobal() {
   // Encontrar todos los horarios únicos en los que hay algún alumno anotado hoy
   const horariosDelDia = new Set();
   todosLosUsuarios.forEach(u => {
-    u.turnos_fijos?.forEach(t => {
+    const turnos = u.turnos_fijos || u.turnosFijos;
+    turnos?.forEach(t => {
       if (t.dia === diaInfo.nombreLargo) {
-        horariosDelDia.add(t.hora);
+        const idUnicoClase = `${diaInfo.isoDate}_${t.hora}`;
+        if (!u.clases_canceladas?.includes(idUnicoClase)) {
+          horariosDelDia.add(t.hora);
+        }
+      }
+    });
+    u.clases_extra?.forEach(extra => {
+      if (extra.startsWith(diaInfo.isoDate)) {
+        horariosDelDia.add(extra.split('_')[1]);
       }
     });
   });
@@ -83,9 +92,18 @@ export default function CalendarioGlobal() {
   });
 
   horariosOrdenados.forEach(hora => {
-    const usuariosEnClase = todosLosUsuarios.filter(u => 
-      u.turnos_fijos?.some(t => t.dia === diaInfo.nombreLargo && t.hora === hora)
-    );
+    const usuariosEnClase = todosLosUsuarios.filter(u => {
+      const idUnicoClase = `${diaInfo.isoDate}_${hora}`;
+      if (u.clases_canceladas?.includes(idUnicoClase)) return false;
+      
+      const turnos = u.turnos_fijos || u.turnosFijos;
+      const tieneFijo = turnos?.some(t => t.dia === diaInfo.nombreLargo && t.hora === hora);
+      if (tieneFijo) return true;
+      
+      if (u.clases_extra?.includes(idUnicoClase)) return true;
+      
+      return false;
+    });
 
     clasesDelDia.push({
       id: `${diaSeleccionado}-${hora}`,

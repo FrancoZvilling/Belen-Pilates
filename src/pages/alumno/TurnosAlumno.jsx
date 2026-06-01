@@ -1,97 +1,106 @@
-import { useState } from 'react';
-import { useMockStore } from '../../store/mockStore';
+import { useState, useEffect } from 'react';
 import TurnoCard from '../../components/specific/TurnoCard';
 import Modal from '../../components/common/Modal';
 import { useAuthStore } from '../../store/authStore';
 import { Calendar, History, CheckCircle, Info, RefreshCw, AlertCircle } from 'lucide-react';
-
-const HISTORIAL_MOCK = [];
+import { db } from '../../config/firebase';
+import { collection, getDocs } from 'firebase/firestore';
+import { generarBolsaDeTurnos, generarAgendaUsuario } from '../../utils/calendarUtils';
+import { intercambiarTurno, cancelarClaseAnticipada, recuperarClase } from '../../services/turnosService';
 
 export default function TurnosAlumno() {
-  const { userData } = useAuthStore(state => state);
-  const { 
-    bolsaTurnos, 
-    intercambiarTurno,
-    cancelarConAnticipacion
-  } = useMockStore();
-
+  const { userData, user } = useAuthStore(state => state);
+  
   const creditosRecuperacion = userData?.creditos_recuperacion || 0;
 
-  // Ordenamiento Dinámico
-  const d = new Date();
-  const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
-  const argDate = new Date(utc + (3600000 * -3)); // UTC-3 (Argentina)
-  const currentDayIndex = argDate.getDay(); // 0 (Dom) a 6 (Sab)
-  
-  const diasSemanales = { 'Domingo': 0, 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5, 'Sábado': 6 };
+  const misTurnos = userData ? generarAgendaUsuario(userData, 14) : [];
 
-  let misTurnos = userData?.turnos_fijos?.map((turno, i) => {
-    const diaTurno = diasSemanales[turno.dia];
-    const esHoy = diaTurno === currentDayIndex;
-    const esManana = diaTurno === (currentDayIndex + 1) % 7;
-    
-    // Calcular fechaIsoString para este turno específico (buscando el próximo día que coincida)
-    let daysDiff = diaTurno - currentDayIndex;
-    if (daysDiff < 0) daysDiff += 7;
-    
-    const turnoDate = new Date(argDate);
-    turnoDate.setDate(turnoDate.getDate() + daysDiff);
-    const fechaIsoString = `${turnoDate.getFullYear()}-${String(turnoDate.getMonth()+1).padStart(2,'0')}-${String(turnoDate.getDate()).padStart(2,'0')}`;
-    
-    const registroHistorial = userData?.historial_asistencias?.find(h => h.fecha === fechaIsoString && h.hora === turno.hora);
-    const isPresente = registroHistorial?.estado === 'presente';
-    const isAusente = registroHistorial?.estado === 'ausente';
-
-    return {
-      id: i,
-      fechaOriginal: turno.dia,
-      fecha: esHoy ? 'Hoy' : esManana ? 'Mañana' : turno.dia,
-      hora: turno.hora,
-      tipo: 'Fijo',
-      isPresente: isPresente,
-      isAusente: isAusente
-    };
-  }) || [];
-
-  misTurnos.sort((a, b) => {
-    let weightA = diasSemanales[a.fechaOriginal];
-    let weightB = diasSemanales[b.fechaOriginal];
-    
-    if (weightA < currentDayIndex) weightA += 7;
-    if (weightB < currentDayIndex) weightB += 7;
-    
-    if (weightA === weightB) {
-      return parseInt(a.hora.split(':')[0]) - parseInt(b.hora.split(':')[0]);
-    }
-    return weightA - weightB;
-  });
-
-  const [activeTab, setActiveTab] = useState('proximos'); // 'proximos' o 'historial'
+  const [activeTab, setActiveTab] = useState('proximos');
   const [turnoACambiar, setTurnoACambiar] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBolsaLibreOpen, setIsBolsaLibreOpen] = useState(false);
+  
+  const [bolsaTurnos, setBolsaTurnos] = useState([]);
+  const [isLoadingBolsa, setIsLoadingBolsa] = useState(false);
 
   // Generar historial real desde Firebase
   const historialReal = userData?.historial_asistencias ? [...userData.historial_asistencias].reverse() : [];
   const inasistenciasList = historialReal.filter(h => h.estado === 'ausente');
 
-  // Funciones de Swap y Cancelación idénticas al Dashboard
+  // Cargar Bolsa solo cuando se abre un modal
+  useEffect(() => {
+    if (isModalOpen || isBolsaLibreOpen) {
+      const cargarBolsa = async () => {
+        setIsLoadingBolsa(true);
+        try {
+          const [snapUsuarios, snapPre] = await Promise.all([
+            getDocs(collection(db, 'usuarios')),
+            getDocs(collection(db, 'pre_registros'))
+          ]);
+          
+          const users = snapUsuarios.docs.map(d => ({id: d.id, ...d.data()})).filter(u => u.estado !== 'inactivo');
+          const preRegs = snapPre.docs.map(d => ({id: d.id, ...d.data()}));
+          
+          const todosActivos = [...users, ...preRegs];
+          setBolsaTurnos(generarBolsaDeTurnos(todosActivos, 7, user.uid));
+        } catch (error) {
+          console.error("Error calculando bolsa:", error);
+        } finally {
+          setIsLoadingBolsa(false);
+        }
+      };
+      cargarBolsa();
+    }
+  }, [isModalOpen, isBolsaLibreOpen]);
+
   const handleCambiarClick = (turno) => {
+    if (turno.isCancelado) return alert("Este turno ya fue cancelado.");
+    if (turno.isPresente || turno.isAusente) return alert("Este turno ya pasó y está registrado en tu historial.");
     setTurnoACambiar(turno);
     setIsModalOpen(true);
   };
 
-  const handleConfirmarSwap = (idNuevoTurno) => {
+  const handleConfirmarSwap = async (idTurnoDestino) => {
     if (turnoACambiar) {
-      intercambiarTurno(idNuevoTurno, turnoACambiar.id);
-      setIsModalOpen(false);
-      setTurnoACambiar(null);
+      const res = await intercambiarTurno(db, user.uid, idTurnoDestino, turnoACambiar.id);
+      if (res.success) {
+        alert("¡Turno cambiado con éxito!");
+        setIsModalOpen(false);
+        setTurnoACambiar(null);
+      } else {
+        alert("Error al cambiar turno: " + res.error);
+      }
     }
   };
 
-  const handleCancelarClick = (turno) => {
-    if (window.confirm(`¿Estás seguro de cancelar tu turno del ${turno.fecha}? Se te otorgará 1 crédito de recuperación.`)) {
-      cancelarConAnticipacion(turno.id);
+  const handleRecuperar = async (idTurnoDestino) => {
+    const res = await recuperarClase(db, user.uid, idTurnoDestino);
+    if (res.success) {
+      alert("¡Te has anotado exitosamente en este turno de recuperación!");
+      setIsBolsaLibreOpen(false);
+    } else {
+      alert("Error al usar crédito: " + res.error);
+    }
+  };
+
+  const handleCancelarClick = async (turno) => {
+    if (turno.isCancelado) return alert("Ya cancelaste este turno.");
+    const creditosUsados = userData?.creditos_usados_este_mes || 0;
+    const mensajeConfirm = creditosUsados < 2 
+      ? `¿Estás seguro de cancelar tu turno del ${turno.fecha}? Se te otorgará 1 crédito de recuperación.`
+      : `¿Estás seguro de cancelar tu turno del ${turno.fecha}? IMPORTANTE: Ya usaste tus 2 créditos mensuales, por lo que NO se te otorgará crédito por esta inasistencia.`;
+
+    if (window.confirm(mensajeConfirm)) {
+      const res = await cancelarClaseAnticipada(db, user.uid, turno.id);
+      if (res.success) {
+        if (res.otorgarCredito) {
+          alert("Turno cancelado exitosamente. Se te otorgó 1 crédito de recuperación.");
+        } else {
+          alert("Se marcó la inasistencia pero ya superaste el límite de 2 créditos mensuales para recuperar.");
+        }
+      } else {
+        alert("Error al cancelar: " + res.error);
+      }
     }
   };
 
@@ -164,7 +173,13 @@ export default function TurnosAlumno() {
 
             {/* Lista de Turnos */}
             <div>
-              {misTurnos.length === 0 ? (
+              {userData?.clases_restantes <= 0 ? (
+                <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center shadow-sm">
+                  <AlertCircle className="mx-auto text-red-400 mb-3" size={32} />
+                  <p className="font-bold text-red-800">No tenés clases disponibles</p>
+                  <p className="text-sm text-red-700 mt-1">Aboná tu mensualidad para volver a gestionar tus turnos.</p>
+                </div>
+              ) : misTurnos.length === 0 ? (
                 <div className="text-center py-10 bg-white rounded-2xl shadow-sm border border-gray-100">
                   <CheckCircle className="mx-auto text-gray-300 mb-2" size={40} />
                   <p className="text-gray-500 font-medium">No tenés turnos programados.</p>
@@ -226,12 +241,15 @@ export default function TurnosAlumno() {
                 <span className="text-3xl font-black text-orange-500">{creditosRecuperacion}</span>
               </div>
               <h3 className="text-xl font-black text-orange-800 mb-2">Clases para Recuperar</h3>
-              <p className="text-orange-700 text-sm font-medium mb-6">
+              <p className="text-orange-700 text-sm font-medium mb-2">
                 Tenés {creditosRecuperacion} inasistencia{creditosRecuperacion !== 1 && 's'} a favor para canjear por clases en otros horarios.
+              </p>
+              <p className="text-orange-600/80 text-xs font-bold uppercase tracking-wider mb-6">
+                Recuerda: Máximo 2 créditos por mes
               </p>
               
               <button 
-                onClick={() => alert("Próximamente: Estamos construyendo el calendario interactivo para que puedas canjear tus inasistencias en cualquier clase que tenga lugar libre. ¡Estará listo muy pronto!")}
+                onClick={() => setIsBolsaLibreOpen(true)}
                 disabled={creditosRecuperacion === 0}
                 className={`w-full py-4 rounded-xl font-black text-lg transition-transform ${
                   creditosRecuperacion > 0 
@@ -291,7 +309,12 @@ export default function TurnosAlumno() {
         </p>
 
         <div className="space-y-3">
-          {bolsaTurnos.filter(b => b.ocupacion < b.capacidad).length > 0 ? (
+          {isLoadingBolsa ? (
+            <div className="text-center py-6">
+              <div className="w-8 h-8 border-4 border-gray-200 border-t-primary-asistencia rounded-full animate-spin mx-auto mb-2"></div>
+              <p className="text-gray-500 font-medium">Buscando turnos disponibles...</p>
+            </div>
+          ) : bolsaTurnos.filter(b => b.ocupacion < b.capacidad).length > 0 ? (
             bolsaTurnos.filter(b => b.ocupacion < b.capacidad).map((turnoBolsa) => {
               const lugaresLibres = turnoBolsa.capacidad - turnoBolsa.ocupacion;
               return (
@@ -333,17 +356,19 @@ export default function TurnosAlumno() {
         </p>
         
         <div className="space-y-3">
-          {bolsaTurnos.filter(b => b.ocupacion < b.capacidad).length > 0 ? (
+          {isLoadingBolsa ? (
+            <div className="text-center py-6">
+              <div className="w-8 h-8 border-4 border-gray-200 border-t-primary-asistencia rounded-full animate-spin mx-auto mb-2"></div>
+              <p className="text-gray-500 font-medium">Buscando turnos disponibles...</p>
+            </div>
+          ) : bolsaTurnos.filter(b => b.ocupacion < b.capacidad).length > 0 ? (
             bolsaTurnos.filter(b => b.ocupacion < b.capacidad).map((turnoBolsa) => {
               const lugaresLibres = turnoBolsa.capacidad - turnoBolsa.ocupacion;
               return (
                 <div 
                   key={turnoBolsa.id} 
                   className="flex items-center justify-between p-4 border border-gray-100 rounded-xl hover:border-blue-500 transition-colors bg-white shadow-sm cursor-pointer"
-                  onClick={() => {
-                    alert("¡Te has anotado exitosamente en este turno de recuperación!");
-                    setIsBolsaLibreOpen(false);
-                  }}
+                  onClick={() => handleRecuperar(turnoBolsa.id)}
                 >
                   <div>
                     <h4 className="font-bold text-gray-800">{turnoBolsa.fecha}</h4>

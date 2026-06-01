@@ -1,7 +1,20 @@
 import { Calendar, Clock, RefreshCw, XCircle, CheckCircle, AlertCircle } from 'lucide-react';
 
 export default function TurnoCard({ turno, onCambiar, onCancelar }) {
-  // turno: { id, fecha, hora, tipo }
+  const d = new Date();
+  const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+  const now = new Date(utc + (3600000 * -3)); // Arg time
+
+  let isCancelable = true;
+  if (turno.fechaIsoString && turno.hora) {
+    const classDate = new Date(`${turno.fechaIsoString}T${turno.hora}:00-03:00`);
+    const diffMs = classDate - now;
+    const diffHours = diffMs / (1000 * 60 * 60);
+    if (diffHours < 2) {
+      isCancelable = false;
+    }
+  }
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-3">
       <div className="flex items-center justify-between mb-3">
@@ -24,7 +37,12 @@ export default function TurnoCard({ turno, onCambiar, onCancelar }) {
         )}
       </div>
 
-      {turno.isPresente ? (
+      {turno.isCancelado ? (
+        <div className="mt-4 flex items-center justify-center py-2.5 bg-gray-100 text-gray-500 font-bold rounded-lg text-sm border border-gray-200">
+          <XCircle size={16} className="mr-2" />
+          Cancelado (Crédito Otorgado)
+        </div>
+      ) : turno.isPresente ? (
         <div className="mt-4 flex items-center justify-center py-2.5 bg-green-50 text-green-700 font-bold rounded-lg text-sm border border-green-100">
           <CheckCircle size={16} className="mr-2" />
           Presente Confirmado
@@ -34,7 +52,11 @@ export default function TurnoCard({ turno, onCambiar, onCancelar }) {
           <AlertCircle size={16} className="mr-2" />
           Ausente
         </div>
-      ) : (
+      ) : !turno.esIntercambiable ? (
+        <div className="mt-4 flex items-center justify-center py-2.5 bg-blue-50 text-blue-700 font-bold rounded-lg text-sm border border-blue-100">
+          Turno Extra / Recupero (Fijo)
+        </div>
+      ) : isCancelable ? (
         <div className="flex gap-2 mt-4">
           <button 
             onClick={() => onCambiar(turno)}
@@ -50,6 +72,11 @@ export default function TurnoCard({ turno, onCambiar, onCancelar }) {
           >
             <XCircle size={20} />
           </button>
+        </div>
+      ) : (
+        <div className="mt-4 flex flex-col items-center justify-center py-2.5 bg-gray-50 text-gray-500 font-medium rounded-lg text-xs border border-gray-200 text-center px-2">
+          <span>Muy cerca del horario para cancelar</span>
+          <span className="text-[10px] text-gray-400 mt-0.5">(Límite: 2hs antes)</span>
         </div>
       )}
     </div>

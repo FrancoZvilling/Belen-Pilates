@@ -1,25 +1,31 @@
 import { useState } from 'react';
-import { Users, Search, ShieldAlert, MoreVertical, Mail, Phone, UserPlus, Archive, RefreshCcw } from 'lucide-react';
+import { Users, Search, ShieldAlert, MoreVertical, Mail, Phone, UserPlus, Archive, RefreshCcw, Check } from 'lucide-react';
 import { db } from '../../config/firebase';
+import { doc, setDoc } from 'firebase/firestore';
 import { archivarUsuario, reactivarUsuario } from '../../services/authService';
+import Modal from '../../components/common/Modal';
 
 import { useAdminStore } from '../../store/adminStore';
 
 export default function GestionUsuarios() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filtroRol, setFiltroRol] = useState('todos'); // 'todos', 'alumno', 'staff', 'inactivos'
+  const [filtroRol, setFiltroRol] = useState('alumno'); // 'alumno', 'staff', 'inactivos'
   const [menuAbiertoId, setMenuAbiertoId] = useState(null);
+  const [isProfeModalOpen, setIsProfeModalOpen] = useState(false);
+  const [isProfeSuccess, setIsProfeSuccess] = useState(false);
+  const [isSavingProfe, setIsSavingProfe] = useState(false);
+  const [profeForm, setProfeForm] = useState({ nombre: '', email: '', telefono: '' });
 
   const { usuarios, preRegistros, usuariosInactivos, preRegistrosInactivos } = useAdminStore();
   
   const todosLosUsuarios = filtroRol === 'inactivos' 
     ? [
         ...usuariosInactivos.map(u => ({ ...u, isPreRegistro: false })),
-        ...preRegistrosInactivos.map(p => ({ ...p, isPreRegistro: true, rol: 'alumno' }))
+        ...preRegistrosInactivos.map(p => ({ ...p, isPreRegistro: true, rol: p.rol || 'alumno' }))
       ]
     : [
         ...usuarios.map(u => ({ ...u, isPreRegistro: false })),
-        ...preRegistros.map(p => ({ ...p, isPreRegistro: true, rol: 'alumno' }))
+        ...preRegistros.map(p => ({ ...p, isPreRegistro: true, rol: p.rol || 'alumno' }))
       ];
 
   // Filtrado de usuarios
@@ -64,6 +70,32 @@ export default function GestionUsuarios() {
     }
   };
 
+  const handleGuardarProfesor = async () => {
+    if (!profeForm.nombre || !profeForm.email) {
+      alert('Por favor completá el nombre y el email del profesor.');
+      return;
+    }
+    try {
+      setIsSavingProfe(true);
+      const emailId = profeForm.email.trim().toLowerCase();
+      const preRegistroRef = doc(db, 'pre_registros', emailId);
+      await setDoc(preRegistroRef, {
+        nombre: profeForm.nombre,
+        email: emailId,
+        telefono: profeForm.telefono,
+        rol: 'admin',
+        fecha_registro: new Date().toISOString()
+      });
+      setIsProfeModalOpen(false);
+      setIsProfeSuccess(true);
+    } catch (error) {
+      console.error('Error al pre-cargar profesor:', error);
+      alert('Hubo un error al guardar. Revisá tu conexión.');
+    } finally {
+      setIsSavingProfe(false);
+    }
+  };
+
   return (
     <div className="bg-gray-50 min-h-screen pb-24 font-sans">
       
@@ -79,7 +111,10 @@ export default function GestionUsuarios() {
               <p className="text-sm font-semibold text-gray-500 mt-1">Directorio del estudio</p>
             </div>
           </div>
-          <button className="bg-primary-pagos text-white p-3 rounded-full shadow-md active:scale-95 transition-transform">
+          <button 
+            onClick={() => setIsProfeModalOpen(true)}
+            className="bg-primary-pagos text-white p-3 rounded-full shadow-md active:scale-95 transition-transform"
+          >
             <UserPlus size={20} />
           </button>
         </div>
@@ -98,12 +133,6 @@ export default function GestionUsuarios() {
 
         {/* Tabs de Filtro */}
         <div className="flex space-x-2 bg-gray-100 p-1 rounded-xl">
-          <button 
-            onClick={() => setFiltroRol('todos')}
-            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${filtroRol === 'todos' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
-          >
-            Todos
-          </button>
           <button 
             onClick={() => setFiltroRol('alumno')}
             className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${filtroRol === 'alumno' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
@@ -184,6 +213,7 @@ export default function GestionUsuarios() {
                   </div>
                 </div>
 
+                {usuario.rol !== 'superadmin' && (
                 <div className="relative">
                   <button 
                     onClick={() => setMenuAbiertoId(menuAbiertoId === usuario.id ? null : usuario.id)}
@@ -201,7 +231,7 @@ export default function GestionUsuarios() {
                           className="w-full text-left px-4 py-3 text-sm font-semibold text-green-600 hover:bg-green-50 flex items-center transition-colors"
                         >
                           <RefreshCcw size={16} className="mr-2" />
-                          Reactivar Alumno
+                          Reactivar Usuario
                         </button>
                       ) : (
                         <button 
@@ -209,12 +239,13 @@ export default function GestionUsuarios() {
                           className="w-full text-left px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 flex items-center transition-colors"
                         >
                           <Archive size={16} className="mr-2" />
-                          Archivar Alumno
+                          Archivar Usuario
                         </button>
                       )}
                     </div>
                   )}
                 </div>
+                )}
               </div>
 
               {/* Detalles de Contacto (Plegables visualmente) */}
@@ -240,6 +271,81 @@ export default function GestionUsuarios() {
           </div>
         )}
       </div>
+
+      {/* Modal: Nuevo Profesor */}
+      <Modal
+        isOpen={isProfeModalOpen}
+        onClose={() => setIsProfeModalOpen(false)}
+        title="Nuevo Profesor"
+      >
+        <div className="space-y-4 py-2">
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Nombre Completo</label>
+            <input
+              type="text"
+              value={profeForm.nombre}
+              onChange={(e) => setProfeForm({ ...profeForm, nombre: e.target.value })}
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-pagos focus:bg-white transition-colors"
+              placeholder="Ej. María López"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Email</label>
+            <input
+              type="email"
+              value={profeForm.email}
+              onChange={(e) => setProfeForm({ ...profeForm, email: e.target.value })}
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-pagos focus:bg-white transition-colors"
+              placeholder="Ej. maria@gmail.com"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Teléfono</label>
+            <input
+              type="tel"
+              value={profeForm.telefono}
+              onChange={(e) => setProfeForm({ ...profeForm, telefono: e.target.value })}
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-pagos focus:bg-white transition-colors"
+              placeholder="Opcional"
+            />
+          </div>
+          <button
+            onClick={handleGuardarProfesor}
+            disabled={isSavingProfe}
+            className="w-full bg-primary-pagos text-white font-bold py-4 rounded-xl shadow-md active:scale-95 transition-transform flex items-center justify-center disabled:opacity-70 disabled:cursor-not-allowed mt-4"
+          >
+            {isSavingProfe ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              <><UserPlus size={20} className="mr-2" /> Pre-cargar Profesor</>
+            )}
+          </button>
+        </div>
+      </Modal>
+
+      {/* Modal: Éxito */}
+      <Modal
+        isOpen={isProfeSuccess}
+        onClose={() => setIsProfeSuccess(false)}
+        title=""
+      >
+        <div className="flex flex-col items-center justify-center py-6 text-center">
+          <Check size={80} className="text-green-500 mb-4 bg-green-50 p-4 rounded-full" />
+          <h2 className="text-2xl font-black text-gray-800 mb-2">Pre-carga Exitosa</h2>
+          <p className="text-gray-600 text-sm px-4">
+            El perfil de <strong>{profeForm.nombre}</strong> se pre-cargó como Profesor. Ya puede crear su cuenta en la aplicación con su email.
+          </p>
+          <button
+            onClick={() => {
+              setIsProfeSuccess(false);
+              setProfeForm({ nombre: '', email: '', telefono: '' });
+            }}
+            className="mt-8 w-full py-4 bg-gray-100 text-gray-800 font-bold rounded-xl active:bg-gray-200 transition-colors"
+          >
+            Aceptar
+          </button>
+        </div>
+      </Modal>
 
     </div>
   );

@@ -3,6 +3,9 @@ import { useAuthStore } from '../../store/authStore';
 import { useAdminStore } from '../../store/adminStore';
 import CamillaCard from '../../components/specific/CamillaCard';
 import { ChevronLeft, ChevronRight, CalendarDays, Info } from 'lucide-react';
+import { db } from '../../config/firebase';
+import { registrarAsistenciaAlumno } from '../../services/turnosService';
+import { generarAgendaUsuario } from '../../utils/calendarUtils';
 
 export default function AsistenciasDiarias() {
   const logout = useAuthStore(state => state.logout);
@@ -23,21 +26,32 @@ export default function AsistenciasDiarias() {
   
   const currentHourDecimal = argDate.getHours() + (argDate.getMinutes() / 60);
 
-  // Extraer clases del día reales
+  // Extraer clases del día reales usando la agenda dinámica
+  const agendasHoy = useMemo(() => {
+    // Computar las agendas de todos los usuarios pero solo hasta HOY (0 días hacia el futuro)
+    const agendas = [];
+    todosLosUsuarios.forEach(u => {
+      const agendaCompleta = generarAgendaUsuario(u, 0);
+      const agendaHoy = agendaCompleta.filter(t => t.fechaIsoString === fechaIsoString);
+      if (agendaHoy.length > 0) {
+        agendas.push({
+          usuario: u,
+          turnosHoy: agendaHoy
+        });
+      }
+    });
+    return agendas;
+  }, [todosLosUsuarios, fechaIsoString]);
+
   const clasesDelDia = useMemo(() => {
     const horarios = new Set();
-    todosLosUsuarios.forEach(u => {
-      u.turnos_fijos?.forEach(t => {
-        if (t.dia === todayStringLargo) {
-          horarios.add(t.hora);
-        }
-      });
+    agendasHoy.forEach(item => {
+      item.turnosHoy.forEach(t => horarios.add(t.hora));
     });
-    
     return Array.from(horarios).sort((a, b) => {
       return parseInt(a.split(':')[0]) - parseInt(b.split(':')[0]);
     });
-  }, [todosLosUsuarios, todayStringLargo]);
+  }, [agendasHoy]);
 
   const [classIndex, setClassIndex] = useState(0);
 
@@ -65,23 +79,29 @@ export default function AsistenciasDiarias() {
   const horaSeleccionada = clasesDelDia[classIndex];
   const usuariosEnClase = useMemo(() => {
     if (!horaSeleccionada) return [];
-    return todosLosUsuarios.filter(u => 
-      u.turnos_fijos?.some(t => t.dia === todayStringLargo && t.hora === horaSeleccionada)
-    );
-  }, [horaSeleccionada, todosLosUsuarios, todayStringLargo]);
-
-  // Estado local para mockear el botón de presente
-  const [asistenciasTemp, setAsistenciasTemp] = useState({});
-
-  useEffect(() => {
-    setAsistenciasTemp({});
-  }, [classIndex]);
-
-  const marcarPresenteLocal = (idCamilla) => {
-    setAsistenciasTemp(prev => {
-      const actual = prev[idCamilla] || 'reservada';
-      return { ...prev, [idCamilla]: actual === 'reservada' ? 'presente' : 'reservada' };
+    
+    // Filtrar los usuarios que tengan esta hora específica en su agenda de hoy
+    const usuarios = [];
+    agendasHoy.forEach(item => {
+      if (item.turnosHoy.some(t => t.hora === horaSeleccionada)) {
+        usuarios.push(item.usuario);
+      }
     });
+    return usuarios;
+  }, [horaSeleccionada, agendasHoy]);
+
+  // Función real de marcado de presente compartida con el panel de alumno
+  const handleMarcarPresente = async (usuarioId) => {
+    if (!usuarioId) return;
+    try {
+      const res = await registrarAsistenciaAlumno(db, usuarioId, fechaIsoString, horaSeleccionada);
+      if (!res.success) {
+        alert("Error al registrar asistencia: " + res.error);
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Hubo un problema de conexión al registrar el presente.");
+    }
   };
 
   // Distribuir en las 8 camillas
@@ -93,20 +113,22 @@ export default function AsistenciasDiarias() {
       const registro = historial.find(h => h.fecha === fechaIsoString && h.hora === horaSeleccionada);
       
       let estadoDB = 'reservada';
+      const turnoAgenda = agendasHoy.find(a => a.usuario.id === usuario.id)?.turnosHoy.find(t => t.hora === horaSeleccionada);
+
       if (registro?.estado === 'presente') estadoDB = 'presente';
       else if (registro?.estado === 'ausente') estadoDB = 'ausente';
-      
-      // Estado local de admin prevalece sobre el de la BD
-      const finalEstado = asistenciasTemp[id] ? asistenciasTemp[id] : estadoDB;
+      else if (turnoAgenda?.estadoEspecial === 'ausente_pago') estadoDB = 'ausente_pago';
 
       return {
         id: id,
-        estado: finalEstado,
+        usuarioId: usuario.id,
+        estado: estadoDB,
         alumno: usuario.nombre
       };
     } else {
       return {
         id: id,
+        usuarioId: null,
         estado: 'libre',
         alumno: null
       };
@@ -200,7 +222,7 @@ export default function AsistenciasDiarias() {
               <CamillaCard 
                 key={camilla.id} 
                 camilla={camilla} 
-                onMarcarPresente={marcarPresenteLocal}
+                onMarcarPresente={handleMarcarPresente}
               />
             ))}
           </div>

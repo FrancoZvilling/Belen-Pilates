@@ -15,13 +15,13 @@ export default function BottomNavigation() {
     ];
   } else if (role === 'admin') {
     navItems = [
-      { to: '/admin/alta-alumno', icon: Home, label: 'Inicio', activeColor: 'text-primary-turnos' },
+      { to: '/admin/alta-alumno', icon: UserPlus, label: 'Alta', activeColor: 'text-primary-turnos' },
       { to: '/admin/asistencias', icon: CheckCircle, label: 'Camillas', activeColor: 'text-primary-turnos' },
       { to: '/admin/calendario', icon: Calendar, label: 'Calendario', activeColor: 'text-primary-turnos' },
     ];
   } else if (role === 'superadmin') {
     navItems = [
-      { to: '/admin/alta-alumno', icon: Home, label: 'Inicio', activeColor: 'text-primary-pagos' },
+      { to: '/admin/alta-alumno', icon: UserPlus, label: 'Alta', activeColor: 'text-primary-pagos' },
       { to: '/admin/asistencias', icon: CheckCircle, label: 'Camillas', activeColor: 'text-primary-pagos' },
       { to: '/admin/calendario', icon: Calendar, label: 'Calendario', activeColor: 'text-primary-pagos' },
       { to: '/superadmin/pagos', icon: CreditCard, label: 'Pagos', activeColor: 'text-primary-pagos' },

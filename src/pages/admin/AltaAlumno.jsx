@@ -1,12 +1,31 @@
 import { useState } from 'react';
 import { useMockStore } from '../../store/mockStore';
+import { useAdminStore } from '../../store/adminStore';
 import { UserPlus, Calendar, Check, AlertCircle } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 import { db } from '../../config/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 
 export default function AltaAlumno() {
-  const grillaMaestra = useMockStore(state => state.grillaMaestra);
+  const grillaBase = useMockStore(state => state.grillaMaestra);
+  const { usuarios, preRegistros = [] } = useAdminStore();
+
+  // Calcular ocupación real basándose en los turnos fijos de los alumnos activos
+  const grillaMaestra = grillaBase.map(dia => ({
+    ...dia,
+    horarios: dia.horarios.map(h => {
+      const todosLosUsuarios = [...usuarios, ...preRegistros];
+      const ocupados = todosLosUsuarios.reduce((acc, user) => {
+        const turnos = user.turnos_fijos || user.turnosFijos;
+        const tieneTurno = turnos?.some(t => t.dia === dia.dia && t.hora === h.hora);
+        return acc + (tieneTurno ? 1 : 0);
+      }, 0);
+      return {
+        ...h,
+        lugares_disponibles: Math.max(0, 8 - ocupados)
+      };
+    })
+  }));
 
   const [formData, setFormData] = useState({ nombre: '', email: '', telefono: '' });
   const [plan, setPlan] = useState(8); // 8 o 12
@@ -38,6 +57,15 @@ export default function AltaAlumno() {
     if (yaSeleccionado) {
       setSeleccionados(seleccionados.filter(s => s.id !== idSeleccion));
     } else {
+      // Si ya tiene un turno ese mismo día, lo reemplazamos silenciosamente
+      const mismoDiaIndex = seleccionados.findIndex(s => s.dia === dia);
+      if (mismoDiaIndex !== -1) {
+        const nuevosSeleccionados = [...seleccionados];
+        nuevosSeleccionados[mismoDiaIndex] = { id: idSeleccion, dia, hora };
+        setSeleccionados(nuevosSeleccionados);
+        return;
+      }
+
       if (seleccionados.length < maxSelecciones) {
         setSeleccionados([...seleccionados, { id: idSeleccion, dia, hora }]);
       } else {
@@ -78,7 +106,7 @@ export default function AltaAlumno() {
         email: emailId,
         telefono: formData.telefono,
         plan: plan,
-        turnosFijos: seleccionados.map(s => ({ dia: s.dia, hora: s.hora })),
+        turnos_fijos: seleccionados.map(s => ({ dia: s.dia, hora: s.hora })),
         fecha_registro: new Date().toISOString()
       });
 
