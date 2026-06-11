@@ -1,6 +1,6 @@
 import { CheckCircle2, User } from 'lucide-react';
 
-export default function CamillaCard({ camilla, onMarcarPresente }) {
+export default function CamillaCard({ camilla, onMarcarPresente, asistenciaHabilitada }) {
   const { estado, alumno } = camilla;
 
   if (estado === 'libre') {
@@ -26,7 +26,12 @@ export default function CamillaCard({ camilla, onMarcarPresente }) {
 
         <button 
           onClick={() => onMarcarPresente(camilla.usuarioId)}
-          className="w-full mt-2 bg-primary-turnos text-white text-xs font-bold py-2 rounded-xl active:scale-95 transition-transform"
+          disabled={!asistenciaHabilitada}
+          className={`w-full mt-2 text-xs font-bold py-2 rounded-xl transition-transform ${
+            asistenciaHabilitada 
+              ? 'bg-primary-turnos text-white active:scale-95' 
+              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+          }`}
         >
           Marcar Presente
         </button>

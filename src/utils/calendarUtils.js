@@ -139,6 +139,25 @@ export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14) => {
         return;
       }
 
+      // Si el día fue feriado
+      if (userData.feriados_disfrutados?.includes(fechaIsoString)) {
+        agenda.push({
+          id: idTurnoUnico,
+          fechaOriginal: fijo.dia,
+          fechaIsoString: fechaIsoString,
+          fecha: etiquetaDia,
+          fechaPura: checkDate,
+          hora: fijo.hora,
+          tipo: 'Fijo',
+          isPresente: false,
+          isAusente: false,
+          estadoEspecial: 'feriado',
+          isCancelado: true,
+          esIntercambiable: false 
+        });
+        return;
+      }
+
       // Chequear si hay historial marcado real (presente/ausente)
       const registroHistorial = userData.historial_asistencias?.find(h => h.fecha === fechaIsoString && h.hora === fijo.hora);
 

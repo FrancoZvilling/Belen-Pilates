@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useAuthStore } from '../../store/authStore';
 import { useAdminStore } from '../../store/adminStore';
 import CamillaCard from '../../components/specific/CamillaCard';
-import { ChevronLeft, ChevronRight, CalendarDays, Info } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarDays, Info, ToggleLeft, ToggleRight } from 'lucide-react';
 import { db } from '../../config/firebase';
 import { registrarAsistenciaAlumno } from '../../services/turnosService';
 import { generarAgendaUsuario } from '../../utils/calendarUtils';
@@ -10,6 +10,7 @@ import { generarAgendaUsuario } from '../../utils/calendarUtils';
 export default function AsistenciasDiarias() {
   const logout = useAuthStore(state => state.logout);
   const { usuarios, preRegistros } = useAdminStore();
+  const [asistenciaHabilitada, setAsistenciaHabilitada] = useState(false);
 
   const todosLosUsuarios = [...usuarios, ...preRegistros];
 
@@ -208,7 +209,20 @@ export default function AsistenciasDiarias() {
 
       {/* Grid de Camillas */}
       <div className="px-5 mt-2">
-        <h2 className="text-lg font-bold text-gray-800 mb-4 px-1">Distribución de Camillas</h2>
+        <div className="flex justify-between items-center mb-4 px-1">
+          <h2 className="text-lg font-bold text-gray-800">Distribución de Camillas</h2>
+          <button 
+            onClick={() => setAsistenciaHabilitada(!asistenciaHabilitada)}
+            className={`flex items-center space-x-1 px-3 py-1.5 rounded-full text-xs font-bold transition-colors shadow-sm ${
+              asistenciaHabilitada 
+                ? 'bg-primary-turnos text-white' 
+                : 'bg-gray-100 text-gray-500 border border-gray-200'
+            }`}
+          >
+            {asistenciaHabilitada ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+            <span>Asistencia</span>
+          </button>
+        </div>
         
         {!horaSeleccionada ? (
           <div className="bg-white border-2 border-dashed border-gray-200 rounded-3xl p-10 text-center shadow-sm">
@@ -223,6 +237,7 @@ export default function AsistenciasDiarias() {
                 key={camilla.id} 
                 camilla={camilla} 
                 onMarcarPresente={handleMarcarPresente}
+                asistenciaHabilitada={asistenciaHabilitada}
               />
             ))}
           </div>

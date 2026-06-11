@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import TurnoCard from '../../components/specific/TurnoCard';
 import Modal from '../../components/common/Modal';
 import { useAuthStore } from '../../store/authStore';
-import { Calendar, History, CheckCircle, Info, RefreshCw, AlertCircle } from 'lucide-react';
+import { Calendar, History, CheckCircle, Info, RefreshCw, AlertCircle, ChevronDown, ChevronUp, Folder } from 'lucide-react';
 import { db } from '../../config/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import { generarBolsaDeTurnos, generarAgendaUsuario } from '../../utils/calendarUtils';
@@ -11,7 +11,17 @@ import { intercambiarTurno, cancelarClaseAnticipada, recuperarClase } from '../.
 export default function TurnosAlumno() {
   const { userData, user } = useAuthStore(state => state);
   
-  const creditosRecuperacion = userData?.creditos_recuperacion || 0;
+  // Filtrar créditos de feriado que no estén vencidos
+  const hoy = new Date();
+  const utc = hoy.getTime() + (hoy.getTimezoneOffset() * 60000);
+  const argDate = new Date(utc + (3600000 * -3));
+  const hoyStr = `${argDate.getFullYear()}-${String(argDate.getMonth()+1).padStart(2,'0')}-${String(argDate.getDate()).padStart(2,'0')}`;
+  
+  const feriadosActivos = userData?.creditos_feriados_activos || [];
+  const feriadosVigentes = feriadosActivos.filter(vto => vto >= hoyStr).length;
+  const normales = userData?.creditos_recuperacion || 0;
+  
+  const creditosRecuperacion = normales + feriadosVigentes;
 
   const misTurnos = userData ? generarAgendaUsuario(userData, 14) : [];
 
@@ -26,6 +36,31 @@ export default function TurnosAlumno() {
   // Generar historial real desde Firebase
   const historialReal = userData?.historial_asistencias ? [...userData.historial_asistencias].reverse() : [];
   const inasistenciasList = historialReal.filter(h => h.estado === 'ausente');
+
+  const agruparPorMes = (lista) => {
+    const agrupado = {};
+    const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    
+    lista.forEach(item => {
+      const [y, m] = item.fecha.split('-');
+      const key = `${meses[parseInt(m)-1]} ${y}`;
+      if (!agrupado[key]) agrupado[key] = [];
+      agrupado[key].push(item);
+    });
+    return agrupado;
+  };
+
+  const historialAgrupado = agruparPorMes(historialReal);
+  const inasistenciasAgrupadas = agruparPorMes(inasistenciasList);
+
+  const [openFolders, setOpenFolders] = useState({});
+
+  const toggleFolder = (folderKey) => {
+    setOpenFolders(prev => ({
+      ...prev,
+      [folderKey]: !prev[folderKey]
+    }));
+  };
 
   // Cargar Bolsa solo cuando se abre un modal
   useEffect(() => {
@@ -201,27 +236,53 @@ export default function TurnosAlumno() {
         {/* TAB: HISTORIAL */}
         {activeTab === 'historial' && (
           <div className="space-y-3">
-            {historialReal.length > 0 ? (
-              historialReal.map((historial, idx) => {
-                const [y, m, d] = historial.fecha.split('-');
-                const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-                const fechaFormateada = `${d} ${meses[parseInt(m)-1]} ${y}`;
-
-                return (
-                <div key={idx} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between opacity-80">
-                  <div>
-                    <h4 className="font-bold text-gray-800">{fechaFormateada}</h4>
-                    <span className="text-gray-500 font-medium text-sm">{historial.hora} hs • Fijo</span>
-                  </div>
-                  <div>
-                    <span className={`px-3 py-1 text-[10px] font-black uppercase tracking-wider rounded-full ${
-                      historial.estado === 'presente' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                    }`}>
-                      {historial.estado === 'presente' ? 'Asistió' : 'Ausente'}
-                    </span>
-                  </div>
+            {Object.keys(historialAgrupado).length > 0 ? (
+              Object.keys(historialAgrupado).map((mesKey) => (
+                <div key={mesKey} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  <button 
+                    onClick={() => toggleFolder(`historial-${mesKey}`)}
+                    className="w-full flex items-center justify-between p-4 bg-gray-50/50 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Folder className="text-primary-turnos opacity-80" size={20} />
+                      <span className="font-bold text-gray-800">{mesKey}</span>
+                      <span className="text-xs bg-white px-2 py-0.5 rounded-full text-gray-500 font-bold border border-gray-200">
+                        {historialAgrupado[mesKey].length} clases
+                      </span>
+                    </div>
+                    {openFolders[`historial-${mesKey}`] ? (
+                      <ChevronUp className="text-gray-400" size={20} />
+                    ) : (
+                      <ChevronDown className="text-gray-400" size={20} />
+                    )}
+                  </button>
+                  
+                  {openFolders[`historial-${mesKey}`] && (
+                    <div className="p-3 space-y-2 border-t border-gray-100">
+                      {historialAgrupado[mesKey].map((historial, idx) => {
+                        const [y, m, d] = historial.fecha.split('-');
+                        const fechaFormateada = `${d}/${m}/${y}`;
+                        
+                        return (
+                          <div key={idx} className="bg-white p-3 rounded-xl border border-gray-50 flex items-center justify-between opacity-90">
+                            <div>
+                              <h4 className="font-bold text-gray-700">{fechaFormateada}</h4>
+                              <span className="text-gray-400 font-medium text-xs">{historial.hora} hs</span>
+                            </div>
+                            <div>
+                              <span className={`px-2 py-1 text-[10px] font-black uppercase tracking-wider rounded-md ${
+                                historial.estado === 'presente' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
+                              }`}>
+                                {historial.estado === 'presente' ? 'Asistió' : 'Ausente'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              )})
+              ))
             ) : (
               <div className="bg-white border-2 border-dashed border-gray-200 rounded-2xl p-6 text-center shadow-sm">
                 <History className="mx-auto text-gray-300 mb-3" size={32} />
@@ -265,31 +326,56 @@ export default function TurnosAlumno() {
             <div>
               <h4 className="font-bold text-gray-800 mb-4 px-2">Registro de Ausencias</h4>
               <div className="space-y-3">
-                {inasistenciasList.length > 0 ? (
-                  inasistenciasList.map((inasistencia, idx) => {
-                    const [y, m, d] = inasistencia.fecha.split('-');
-                    const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-                    const fechaFormateada = `${d} ${meses[parseInt(m)-1]} ${y}`;
-
-                    return (
-                      <div key={idx} className="bg-white p-4 rounded-2xl shadow-sm border border-orange-100 flex items-center justify-between">
-                        <div>
-                          <h4 className="font-bold text-gray-800">{fechaFormateada}</h4>
-                          <span className="text-gray-500 font-medium text-sm">{inasistencia.hora} hs • Fijo</span>
-                        </div>
-                        <div>
-                          <span className="bg-orange-100 text-orange-700 text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full">
-                            Ausente
+                {Object.keys(inasistenciasAgrupadas).length > 0 ? (
+                  Object.keys(inasistenciasAgrupadas).map((mesKey) => (
+                    <div key={mesKey} className="bg-white rounded-2xl shadow-sm border border-orange-100 overflow-hidden">
+                      <button 
+                        onClick={() => toggleFolder(`inasistencias-${mesKey}`)}
+                        className="w-full flex items-center justify-between p-4 bg-orange-50/30 hover:bg-orange-50/60 transition-colors"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <Folder className="text-orange-500 opacity-80" size={20} />
+                          <span className="font-bold text-gray-800">{mesKey}</span>
+                          <span className="text-xs bg-white px-2 py-0.5 rounded-full text-orange-600 font-bold border border-orange-200">
+                            {inasistenciasAgrupadas[mesKey].length} faltas
                           </span>
                         </div>
-                      </div>
-                    );
-                  })
+                        {openFolders[`inasistencias-${mesKey}`] ? (
+                          <ChevronUp className="text-orange-400" size={20} />
+                        ) : (
+                          <ChevronDown className="text-orange-400" size={20} />
+                        )}
+                      </button>
+                      
+                      {openFolders[`inasistencias-${mesKey}`] && (
+                        <div className="p-3 space-y-2 border-t border-orange-100">
+                          {inasistenciasAgrupadas[mesKey].map((inasistencia, idx) => {
+                            const [y, m, d] = inasistencia.fecha.split('-');
+                            const fechaFormateada = `${d}/${m}/${y}`;
+                            
+                            return (
+                              <div key={idx} className="bg-white p-3 rounded-xl border border-gray-50 flex items-center justify-between">
+                                <div>
+                                  <h4 className="font-bold text-gray-800">{fechaFormateada}</h4>
+                                  <span className="text-gray-500 font-medium text-xs">{inasistencia.hora} hs</span>
+                                </div>
+                                <div>
+                                  <span className="bg-orange-100 text-orange-700 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-md">
+                                    Ausente
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))
                 ) : (
                   <div className="bg-white border-2 border-dashed border-gray-200 rounded-2xl p-6 text-center shadow-sm">
                     <CheckCircle className="mx-auto text-green-400 mb-3" size={32} />
-                    <p className="font-bold text-gray-600">¡Asistencia perfecta!</p>
-                    <p className="text-sm text-gray-400 mt-1">No registras inasistencias en tu historial reciente.</p>
+                    <p className="font-bold text-gray-600">¡Excelente asistencia!</p>
+                    <p className="text-sm text-gray-400 mt-1">Aún no registrás faltas. Seguí así.</p>
                   </div>
                 )}
               </div>

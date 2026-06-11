@@ -1,9 +1,12 @@
-import { useState } from 'react';
-import { Calendar as CalendarIcon, Users, Clock, ChevronRight, ChevronLeft, UserCheck } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Calendar as CalendarIcon, Users, Clock, ChevronRight, ChevronLeft, UserCheck, Settings } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 
 import { useAdminStore } from '../../store/adminStore';
 import { useMockStore } from '../../store/mockStore';
+import { db } from '../../config/firebase';
+import { declararFeriado, borrarFeriado } from '../../services/turnosService';
+import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 
 const getWeekDays = (weekOffset = 0) => {
   const d = new Date();
@@ -56,6 +59,13 @@ export default function CalendarioGlobal() {
     const dayCode = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab'][argDate.getDay()];
     return ['lun', 'mar', 'mie', 'jue', 'vie'].includes(dayCode) ? dayCode : 'lun';
   });
+
+  const [isFeriadoModalOpen, setIsFeriadoModalOpen] = useState(false);
+  const [feriadoDate, setFeriadoDate] = useState('');
+  const [isSavingFeriado, setIsSavingFeriado] = useState(false);
+  const [feriadosList, setFeriadosList] = useState([]);
+  const [isLoadingFeriados, setIsLoadingFeriados] = useState(false);
+  const [feriadoTab, setFeriadoTab] = useState('declarar'); // 'declarar' | 'ver'
 
   const DIAS_SEMANA = getWeekDays(weekOffset);
 
@@ -115,20 +125,88 @@ export default function CalendarioGlobal() {
     });
   });
 
+  const handleDeclararFeriado = async () => {
+    if (!feriadoDate) return;
+    if (window.confirm(`¿Estás seguro de declarar el día ${feriadoDate} como Feriado? Se le devolverá la clase y otorgará un crédito a todos los alumnos que tengan turno fijo ese día.`)) {
+      setIsSavingFeriado(true);
+      try {
+        const res = await declararFeriado(db, feriadoDate);
+        if (res.success) {
+          alert('Feriado declarado con éxito. Todos los alumnos afectados han recibido su crédito.');
+          setIsFeriadoModalOpen(false);
+        } else {
+          alert('Hubo un error: ' + res.error);
+        }
+      } catch (err) {
+        alert('Error inesperado.');
+      } finally {
+        setIsSavingFeriado(false);
+      }
+    }
+  };
+
+  const handleFetchFeriados = async () => {
+    setIsLoadingFeriados(true);
+    try {
+      const q = query(collection(db, 'feriados'), orderBy('fecha', 'desc'));
+      const snapshot = await getDocs(q);
+      const feriados = snapshot.docs.map(d => d.data());
+      setFeriadosList(feriados);
+    } catch (err) {
+      console.error('Error fetching feriados', err);
+    } finally {
+      setIsLoadingFeriados(false);
+    }
+  };
+
+  useEffect(() => {
+    if (feriadoTab === 'ver' && isFeriadoModalOpen) {
+      handleFetchFeriados();
+    }
+  }, [feriadoTab, isFeriadoModalOpen]);
+
+  const handleBorrarFeriado = async (fecha) => {
+    if (window.confirm(`¿Estás seguro de revertir el feriado del ${fecha}? Esto devolverá el calendario a la normalidad y descontará los créditos no gastados.`)) {
+      setIsLoadingFeriados(true);
+      try {
+        const res = await borrarFeriado(db, fecha);
+        if (res.success) {
+          alert('Feriado revertido con éxito.');
+          handleFetchFeriados();
+        } else {
+          alert('Error al borrar: ' + res.error);
+        }
+      } catch (err) {
+        alert('Error inesperado.');
+      } finally {
+        setIsLoadingFeriados(false);
+      }
+    }
+  };
+
   return (
     <>
       <div className="bg-gray-50 min-h-screen pb-24 font-sans">
       
       {/* Header Fijo */}
       <header className="px-5 pt-8 pb-4 bg-white shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] sticky top-0 z-20">
-        <div className="flex items-center mb-6">
-          <div className="bg-primary-turnos bg-opacity-10 p-3 rounded-full text-primary-turnos mr-4">
-            <CalendarIcon size={24} />
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center">
+            <div className="bg-primary-turnos bg-opacity-10 p-3 rounded-full text-primary-turnos mr-4">
+              <CalendarIcon size={24} />
+            </div>
+            <div>
+              <h1 className="text-2xl font-black text-gray-800">Calendario Global</h1>
+              <p className="text-sm font-semibold text-gray-500 mt-1">Agenda del Estudio</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-black text-gray-800">Calendario Global</h1>
-            <p className="text-sm font-semibold text-gray-500 mt-1">Agenda del Estudio</p>
-          </div>
+          <button 
+            onClick={() => setIsFeriadoModalOpen(true)}
+            className="p-3 bg-gray-50 rounded-full text-gray-500 hover:bg-gray-100 transition-colors active:scale-95 shadow-sm"
+            title="Ajustes de Calendario / Feriados"
+          >
+            <Settings size={20} />
+          </button>
         </div>
 
         {/* Controles de Semana */}
@@ -315,6 +393,78 @@ export default function CalendarioGlobal() {
                 <UserCheck size={32} className="mx-auto text-gray-300 mb-2" />
                 <p>No hay alumnos anotados.</p>
               </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal Feriados */}
+      <Modal
+        isOpen={isFeriadoModalOpen}
+        onClose={() => setIsFeriadoModalOpen(false)}
+        title="Gestión de Feriados"
+      >
+        <div className="flex border-b mb-4">
+          <button 
+            onClick={() => setFeriadoTab('declarar')}
+            className={`flex-1 py-2 font-bold text-sm ${feriadoTab === 'declarar' ? 'border-b-2 border-primary-turnos text-primary-turnos' : 'text-gray-400'}`}
+          >
+            Declarar Nuevo
+          </button>
+          <button 
+            onClick={() => setFeriadoTab('ver')}
+            className={`flex-1 py-2 font-bold text-sm ${feriadoTab === 'ver' ? 'border-b-2 border-primary-turnos text-primary-turnos' : 'text-gray-400'}`}
+          >
+            Ver Feriados
+          </button>
+        </div>
+
+        {feriadoTab === 'declarar' ? (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Al declarar un feriado, todos los alumnos que tengan un turno fijo ese día recibirán automáticamente <strong>1 crédito extra de feriado (con vigencia de 30 días)</strong> para no perder su clase.
+            </p>
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2">Seleccionar Fecha del Feriado</label>
+              <input 
+                type="date"
+                value={feriadoDate}
+                onChange={(e) => setFeriadoDate(e.target.value)}
+                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-turnos"
+              />
+            </div>
+            <button
+              onClick={handleDeclararFeriado}
+              disabled={!feriadoDate || isSavingFeriado}
+              className="w-full bg-primary-turnos text-white font-bold py-3.5 rounded-xl transition-all active:scale-[0.98] disabled:opacity-50 mt-4"
+            >
+              {isSavingFeriado ? 'Procesando...' : 'Confirmar Feriado'}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2">
+            {isLoadingFeriados ? (
+              <p className="text-center text-sm text-gray-500 py-4">Cargando...</p>
+            ) : feriadosList.length > 0 ? (
+              feriadosList.map((feriado) => {
+                const [y, m, d] = feriado.fecha.split('-');
+                return (
+                  <div key={feriado.fecha} className="bg-gray-50 border border-gray-100 rounded-xl p-3 flex justify-between items-center">
+                    <div>
+                      <h4 className="font-bold text-gray-800 capitalize">{feriado.diaSemana} {d}/{m}/{y}</h4>
+                      <p className="text-[10px] text-gray-400 mt-0.5">Declarado el {new Date(feriado.creadoEn).toLocaleDateString()}</p>
+                    </div>
+                    <button 
+                      onClick={() => handleBorrarFeriado(feriado.fecha)}
+                      className="text-red-500 font-bold text-xs bg-red-50 px-3 py-1.5 rounded-lg active:scale-95 transition-transform"
+                    >
+                      Revertir
+                    </button>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-center text-sm text-gray-500 py-4">No hay feriados declarados.</p>
             )}
           </div>
         )}

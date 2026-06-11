@@ -144,12 +144,6 @@ export default function PanelPagos() {
           >
             <Settings size={24} />
           </button>
-          <button 
-            onClick={logout}
-            className="p-2 bg-red-50 rounded-full text-red-500 active:scale-95 transition-transform"
-          >
-            <LogOut size={24} />
-          </button>
         </div>
       </header>
 

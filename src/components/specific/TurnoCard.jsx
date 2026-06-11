@@ -37,7 +37,12 @@ export default function TurnoCard({ turno, onCambiar, onCancelar }) {
         )}
       </div>
 
-      {turno.isCancelado ? (
+      {turno.estadoEspecial === 'feriado' ? (
+        <div className="mt-4 flex items-center justify-center py-2.5 bg-purple-50 text-purple-700 font-bold rounded-lg text-sm border border-purple-200">
+          <Calendar size={16} className="mr-2" />
+          Pospuesto por el administrador
+        </div>
+      ) : turno.isCancelado ? (
         <div className="mt-4 flex items-center justify-center py-2.5 bg-gray-100 text-gray-500 font-bold rounded-lg text-sm border border-gray-200">
           <XCircle size={16} className="mr-2" />
           Cancelado (Crédito Otorgado)

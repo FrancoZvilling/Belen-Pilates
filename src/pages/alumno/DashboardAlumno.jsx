@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useMockStore } from '../../store/mockStore';
 import SmartAttendanceButton from '../../components/specific/SmartAttendanceButton';
 import ReportAbsenceButton from '../../components/specific/ReportAbsenceButton';
@@ -7,6 +7,9 @@ import { Bell, Calendar, CreditCard, ChevronRight, LogOut, CheckCircle, AlertCir
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { generarAgendaUsuario } from '../../utils/calendarUtils';
+import { db } from '../../config/firebase';
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { marcarNotificacionesLeidas, borrarNotificacion, borrarTodasLasNotificaciones } from '../../services/notificacionesService';
 
 export default function DashboardAlumno() {
   const navigate = useNavigate();
@@ -19,6 +22,32 @@ export default function DashboardAlumno() {
   const clasesMaximas = userData?.plan ?? 8;
   
   const misTurnos = userData ? generarAgendaUsuario(userData, 14) : [];
+
+  const [isNotifPanelOpen, setIsNotifPanelOpen] = useState(false);
+  const [notificaciones, setNotificaciones] = useState([]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const q = query(
+      collection(db, 'notificaciones'),
+      where('usuarioId', '==', user.uid)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      notifs.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+      setNotificaciones(notifs.slice(0, 10)); // Mostrar solo las 10 más recientes
+    });
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  const unreadCount = notificaciones.filter(n => !n.leida).length;
+
+  const handleOpenNotifs = () => {
+    setIsNotifPanelOpen(true);
+    if (unreadCount > 0) {
+      marcarNotificacionesLeidas(db, user.uid);
+    }
+  };
 
   // Calcula el estado de pago del alumno
   const estadoDePago = useMemo(() => {
@@ -49,14 +78,20 @@ export default function DashboardAlumno() {
     <div className="bg-gray-50 min-h-screen pb-24 font-sans">
       
       {/* 1. Header (Bienvenida) */}
-      <header className="px-5 pt-8 pb-4 flex justify-between items-center bg-white sticky top-0 z-10">
+      <header className="px-5 pt-8 pb-4 flex justify-between items-center bg-white sticky top-0 z-10 shadow-sm">
         <h1 className="text-3xl font-black text-gray-800 tracking-tight">
           Hola, {userNombre} <span className="inline-block animate-wave">👋</span>
         </h1>
         <div className="flex items-center space-x-2">
-          <button className="relative p-2 bg-gray-100 rounded-full text-gray-600 active:scale-95 transition-transform">
+          <button 
+            onClick={handleOpenNotifs}
+            className="relative p-2 bg-gray-100 rounded-full text-gray-600 active:scale-95 transition-transform"
+          >
             <Bell size={24} />
-            <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white flex items-center justify-center">
+              </span>
+            )}
           </button>
           <button 
             onClick={logout}
@@ -178,6 +213,10 @@ export default function DashboardAlumno() {
                       <AlertCircle size={14} className="mr-1" />
                       Ausente
                     </span>
+                  ) : turno.estadoEspecial === 'feriado' ? (
+                    <span className="bg-purple-50 text-purple-700 font-bold px-3 py-2 rounded-xl text-[10px] text-center max-w-[100px] flex items-center justify-center border border-purple-200">
+                      Pospuesto por admin
+                    </span>
                   ) : (
                     <button 
                       onClick={() => navigate('/alumno/turnos')}
@@ -232,6 +271,62 @@ export default function DashboardAlumno() {
 
       </div>
 
+      {/* Modal Notificaciones */}
+      <Modal 
+        isOpen={isNotifPanelOpen} 
+        onClose={() => setIsNotifPanelOpen(false)}
+        title={
+          <div className="flex justify-between items-center w-full pr-4">
+            <span>Notificaciones</span>
+            {notificaciones.length > 0 && (
+              <button 
+                onClick={() => {
+                  if (window.confirm('¿Seguro que querés borrar todas las notificaciones?')) {
+                    borrarTodasLasNotificaciones(db, user.uid);
+                  }
+                }}
+                className="text-xs text-red-500 font-bold hover:bg-red-50 px-2 py-1 rounded transition-colors"
+              >
+                Borrar todas
+              </button>
+            )}
+          </div>
+        }
+      >
+        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1 relative">
+          {notificaciones.length > 0 ? (
+            notificaciones.map((notif) => (
+              <div 
+                key={notif.id} 
+                className={`p-4 rounded-xl border relative group ${notif.leida ? 'bg-gray-50 border-gray-100' : 'bg-white border-primary-turnos/30 shadow-sm'}`}
+              >
+                <button 
+                  onClick={() => borrarNotificacion(db, notif.id)}
+                  className="absolute top-2 right-2 text-gray-300 hover:text-red-500 transition-colors bg-white rounded-full"
+                >
+                  <XCircle size={18} />
+                </button>
+                <div className="flex justify-between items-start mb-1 pr-6">
+                  <h4 className={`font-bold text-sm ${notif.leida ? 'text-gray-700' : 'text-primary-turnos'}`}>
+                    {notif.titulo}
+                  </h4>
+                  <span className="text-[10px] text-gray-400 font-medium">
+                    {new Date(notif.fecha).toLocaleDateString('es-AR')}
+                  </span>
+                </div>
+                <p className={`text-sm ${notif.leida ? 'text-gray-500' : 'text-gray-800'} pr-2`}>
+                  {notif.mensaje}
+                </p>
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-8">
+              <Bell className="mx-auto text-gray-300 mb-3" size={32} />
+              <p className="text-gray-500 text-sm">No tienes notificaciones nuevas.</p>
+            </div>
+          )}
+        </div>
+      </Modal>
 
       <style>{`
         @keyframes wave {

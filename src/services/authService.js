@@ -1,6 +1,7 @@
 import { auth, db } from '../config/firebase';
 import { GoogleAuthProvider, signInWithPopup, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
 import { doc, getDoc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { crearNotificacion } from './notificacionesService';
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -52,6 +53,18 @@ export const loginWithGoogle = async () => {
 
       // Borrar el ticket de pre-registro
       await deleteDoc(preRegistroRef);
+
+      // Enviar notificación al administrador si es un alumno nuevo
+      if (rolAsignado === 'alumno') {
+        const nombreAlumno = preData.nombre || user.displayName;
+        await crearNotificacion(
+          db, 
+          'admin', 
+          'nuevo_alumno', 
+          'Nuevo alumno registrado', 
+          `${nombreAlumno} se ha registrado como alumno.`
+        );
+      }
 
       return {
         uid: user.uid,
@@ -138,10 +151,10 @@ export const registerWithEmail = async (email, password, nombre) => {
     const result = await createUserWithEmailAndPassword(auth, email, password);
     const user = result.user;
 
-    // 3. Crear usuario en Firestore
+    // 3. Escribir los datos en la colección "usuarios"
     const userRef = doc(db, 'usuarios', user.uid);
     const userDocData = {
-      nombre: nombre || preData.nombre,
+      nombre: preData.nombre || nombre,
       email: emailId,
       telefono: preData.telefono || '',
       rol: rolAsignado,
@@ -149,7 +162,6 @@ export const registerWithEmail = async (email, password, nombre) => {
       fecha_registro: new Date().toISOString()
     };
 
-    // Solo los alumnos tienen plan, clases y turnos
     if (rolAsignado === 'alumno') {
       userDocData.plan = preData.plan || 8;
       userDocData.clases_restantes = preData.plan || 8;
@@ -157,13 +169,30 @@ export const registerWithEmail = async (email, password, nombre) => {
     }
 
     await setDoc(userRef, userDocData);
-
-    // 4. Borrar el pre-registro
     await deleteDoc(preRegistroRef);
+
+    // Enviar notificación al administrador si es un alumno nuevo
+    if (rolAsignado === 'alumno') {
+      await crearNotificacion(
+        db, 
+        'admin', 
+        'nuevo_alumno', 
+        'Nuevo alumno registrado', 
+        `${preData.nombre || nombre} se ha registrado como alumno.`
+      );
+    }
+
+    // 4. Actualizar el perfil del usuario en Authentication
+    try {
+      const { updateProfile } = await import('firebase/auth');
+      await updateProfile(user, { displayName: preData.nombre || nombre });
+    } catch (e) {
+      console.error("Error silencioso al actualizar displayName:", e);
+    }
 
     return {
       uid: user.uid,
-      nombre: nombre || preData.nombre,
+      nombre: preData.nombre || nombre,
       email: emailId,
       role: rolAsignado
     };

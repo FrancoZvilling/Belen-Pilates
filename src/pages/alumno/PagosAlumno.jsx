@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { db } from '../../config/firebase';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { crearNotificacion } from '../../services/notificacionesService';
 
 export default function PagosAlumno() {
   const navigate = useNavigate();
@@ -11,6 +12,28 @@ export default function PagosAlumno() {
   const [visibleHistory, setVisibleHistory] = useState(6);
   const [pagosHistorial, setPagosHistorial] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isNotifying, setIsNotifying] = useState(false);
+  const [hasNotified, setHasNotified] = useState(false);
+
+  const handleAvisoPago = async () => {
+    setIsNotifying(true);
+    try {
+      const nombreAlumno = userData?.nombre || user?.displayName || 'Un alumno';
+      await crearNotificacion(
+        db,
+        'admin',
+        'aviso_pago',
+        'Aviso de Pago',
+        `${nombreAlumno} ha avisado un pago.`
+      );
+      setHasNotified(true);
+    } catch (error) {
+      console.error("Error al avisar pago:", error);
+      alert('Hubo un error al enviar el aviso. Intentá de nuevo.');
+    } finally {
+      setIsNotifying(false);
+    }
+  };
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -186,6 +209,36 @@ export default function PagosAlumno() {
               <button onClick={() => handleCopy('0720000788000012345678')} className="p-2 text-primary-pagos hover:bg-primary-pagos hover:bg-opacity-10 rounded-lg transition-colors">
                 <Copy size={18} />
               </button>
+            </div>
+
+            <div className="pt-2">
+              <button 
+                onClick={handleAvisoPago}
+                disabled={isNotifying || hasNotified}
+                className={`w-full py-3.5 rounded-xl font-bold flex justify-center items-center transition-all ${
+                  hasNotified 
+                    ? 'bg-green-100 text-green-700' 
+                    : isNotifying 
+                      ? 'bg-gray-200 text-gray-500' 
+                      : 'bg-primary-pagos text-white shadow-sm active:scale-95'
+                }`}
+              >
+                {hasNotified ? (
+                  <>
+                    <CheckCircle size={20} className="mr-2" />
+                    Aviso enviado al administrador
+                  </>
+                ) : isNotifying ? (
+                  'Enviando aviso...'
+                ) : (
+                  'Avisar Pago Realizado'
+                )}
+              </button>
+              {!hasNotified && (
+                <p className="text-[10px] text-gray-400 text-center mt-2 px-4">
+                  Presioná este botón una vez que hayas realizado la transferencia para agilizar la verificación.
+                </p>
+              )}
             </div>
           </div>
         </section>

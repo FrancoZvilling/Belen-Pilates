@@ -1,5 +1,5 @@
-import { doc, runTransaction, writeBatch, collection, getDoc, setDoc } from 'firebase/firestore';
-// import { db } from '../config/firebase'; // Uncomment when firebase is configured
+import { doc, runTransaction, writeBatch, collection, getDoc, setDoc, query, where, getDocs } from 'firebase/firestore';
+import { crearNotificacion } from './notificacionesService';
 
 /**
  * Cancela una clase con anticipación y otorga 1 crédito.
@@ -70,18 +70,41 @@ export const recuperarClase = async (db, uid, idTurnoDestino) => {
       if (!userDoc.exists()) throw new Error("Usuario no encontrado");
 
       const data = userDoc.data();
-      const creditos = data.creditos_recuperacion || 0;
+      const creditosNormales = data.creditos_recuperacion || 0;
+      const creditosFeriados = data.creditos_feriados_activos || [];
       const extras = data.clases_extra || [];
 
-      if (creditos <= 0) {
-        throw new Error("No tienes créditos de recuperación.");
+      // Filtrar créditos de feriado que no estén vencidos
+      const hoy = new Date();
+      // UTC-3 para comparar igual
+      const utc = hoy.getTime() + (hoy.getTimezoneOffset() * 60000);
+      const argDate = new Date(utc + (3600000 * -3));
+      const hoyStr = `${argDate.getFullYear()}-${String(argDate.getMonth()+1).padStart(2,'0')}-${String(argDate.getDate()).padStart(2,'0')}`;
+      
+      const feriadosVigentes = creditosFeriados.filter(vto => vto >= hoyStr);
+      const tieneFeriado = feriadosVigentes.length > 0;
+
+      if (creditosNormales <= 0 && !tieneFeriado) {
+        throw new Error("No tienes créditos disponibles para canjear.");
       }
       if (extras.includes(idTurnoDestino)) {
         throw new Error("Ya estás anotado en esta clase.");
       }
 
+      let nuevosNormales = creditosNormales;
+      let nuevosFeriados = [...feriadosVigentes];
+
+      if (tieneFeriado) {
+        // Consume el crédito de feriado que vence más pronto
+        nuevosFeriados.sort();
+        nuevosFeriados.shift();
+      } else {
+        nuevosNormales -= 1;
+      }
+
       transaction.update(userRef, {
-        creditos_recuperacion: creditos - 1,
+        creditos_recuperacion: nuevosNormales,
+        creditos_feriados_activos: nuevosFeriados,
         clases_extra: [...extras, idTurnoDestino]
       });
     });
@@ -374,6 +397,18 @@ export const ejecutarBarridoInasistencias = async (db, usuariosActivos) => {
         clases_restantes: clasesRestantes,
         historial_asistencias: historial
       });
+      
+      // Crear notificación de inasistencia
+      const notifRef = doc(collection(db, 'notificaciones'));
+      batch.set(notifRef, {
+        usuarioId: usuario.id,
+        tipo: 'inasistencia',
+        titulo: 'Inasistencia Automática',
+        mensaje: `Se ha registrado una inasistencia a tu clase del día ${todayStringLargo}.`,
+        leida: false,
+        fecha: new Date().toISOString()
+      });
+      
       modificaciones++;
     }
   }
@@ -446,6 +481,17 @@ export const registrarPagoAlumno = async (db, uid, monto, nombreAdmin = "Admin")
         vencimiento_otorgado: mesAbonadoStr,
         registrado_por: nombreAdmin
       });
+
+      // 3. Crear notificación
+      const notifRef = doc(collection(db, 'notificaciones'));
+      transaction.set(notifRef, {
+        usuarioId: uid,
+        tipo: 'pago',
+        titulo: 'Pago Recibido',
+        mensaje: `Tu pago de $${monto} fue registrado exitosamente. Tu próximo vencimiento es el ${nuevoVencimiento.toLocaleDateString('es-AR')}.`,
+        leida: false,
+        fecha: new Date().toISOString()
+      });
     });
     return { success: true };
   } catch (error) {
@@ -466,6 +512,171 @@ export const actualizarPrecios = async (db, nuevosPrecios) => {
     return { success: true };
   } catch (error) {
     console.error("Error al actualizar precios:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Declara un feriado, cancela las clases de ese día y otorga un crédito especial a los alumnos con turnos fijos.
+ * @param {Object} db - Firestore
+ * @param {string} fecha - Fecha del feriado 'YYYY-MM-DD'
+ */
+export const declararFeriado = async (db, fecha) => {
+  try {
+    // 1. Identificar el día de la semana
+    const [year, month, day] = fecha.split('-').map(Number);
+    const dateObj = new Date(year, month - 1, day);
+    const diasMapLargo = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const diaSemana = diasMapLargo[dateObj.getDay()];
+
+    if (['Domingo', 'Sábado'].includes(diaSemana)) {
+      return { success: false, error: 'No se puede declarar feriado un fin de semana.' };
+    }
+
+    // Calcular fecha de vencimiento del crédito (30 días)
+    const vtoObj = new Date(year, month - 1, day);
+    vtoObj.setDate(vtoObj.getDate() + 30);
+    const vtoStr = `${vtoObj.getFullYear()}-${String(vtoObj.getMonth() + 1).padStart(2, '0')}-${String(vtoObj.getDate()).padStart(2, '0')}`;
+
+    const batch = writeBatch(db);
+
+    // 2. Comprobar si el feriado ya existe
+    const feriadoRef = doc(db, 'feriados', fecha);
+    const feriadoSnap = await getDoc(feriadoRef);
+    if (feriadoSnap.exists()) {
+      return { success: false, error: 'Este día ya ha sido declarado como feriado.' };
+    }
+
+    // Registrar el feriado en la colección 'feriados'
+    batch.set(feriadoRef, {
+      fecha,
+      diaSemana,
+      creadoEn: new Date().toISOString()
+    });
+
+    // 3. Buscar alumnos activos con turno fijo ese día
+    const q = query(
+      collection(db, 'usuarios'),
+      where('rol', '==', 'alumno'),
+      where('estado', '==', 'activo')
+    );
+    const querySnapshot = await getDocs(q);
+
+    querySnapshot.forEach((userDoc) => {
+      const data = userDoc.data();
+      const turnosFijos = data.turnos_fijos || data.turnosFijos || [];
+      
+      // Si el alumno tiene turno fijo el día del feriado
+      const tieneTurnoFijo = turnosFijos.some(t => t.dia === diaSemana);
+      
+      if (tieneTurnoFijo) {
+        const feriadosActivos = data.creditos_feriados_activos || [];
+        const feriadosDisfrutados = data.feriados_disfrutados || [];
+        const clasesRestantes = data.clases_restantes || 0;
+        
+        batch.update(userDoc.ref, {
+          creditos_feriados_activos: [...feriadosActivos, vtoStr],
+          feriados_disfrutados: [...feriadosDisfrutados, fecha],
+          clases_restantes: Math.max(0, clasesRestantes - 1) // Se descuenta la clase para cambiarla por el crédito
+        });
+
+        // Crear notificación de feriado
+        const notifRef = doc(collection(db, 'notificaciones'));
+        const [y, m, d] = fecha.split('-');
+        batch.set(notifRef, {
+          usuarioId: userDoc.id,
+          tipo: 'feriado',
+          titulo: 'Día Feriado Declarado',
+          mensaje: `Se declaró feriado el día ${d}/${m}/${y}. Hemos devuelto tu clase y cuentas con 1 crédito extra para recuperar.`,
+          leida: false,
+          fecha: new Date().toISOString()
+        });
+      }
+    });
+
+    await batch.commit();
+    return { success: true };
+  } catch (error) {
+    console.error('Error al declarar feriado:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Borra un feriado declarado y revierte los créditos si aún no han sido gastados.
+ * @param {Object} db - Firestore
+ * @param {string} fecha - Fecha del feriado 'YYYY-MM-DD'
+ */
+export const borrarFeriado = async (db, fecha) => {
+  try {
+    const feriadoRef = doc(db, 'feriados', fecha);
+    const feriadoSnap = await getDoc(feriadoRef);
+    
+    if (!feriadoSnap.exists()) {
+      return { success: false, error: 'El feriado no existe o ya fue eliminado.' };
+    }
+
+    const [year, month, day] = fecha.split('-').map(Number);
+    const vtoObj = new Date(year, month - 1, day);
+    vtoObj.setDate(vtoObj.getDate() + 30);
+    const vtoStr = `${vtoObj.getFullYear()}-${String(vtoObj.getMonth() + 1).padStart(2, '0')}-${String(vtoObj.getDate()).padStart(2, '0')}`;
+
+    const batch = writeBatch(db);
+    batch.delete(feriadoRef);
+
+    // Buscar alumnos que "disfrutaron" este feriado
+    const q = query(
+      collection(db, 'usuarios'),
+      where('rol', '==', 'alumno')
+    );
+    const querySnapshot = await getDocs(q);
+
+    querySnapshot.forEach((userDoc) => {
+      const data = userDoc.data();
+      const feriadosDisfrutados = data.feriados_disfrutados || [];
+      
+      // Si a este alumno se le aplicó el feriado
+      if (feriadosDisfrutados.includes(fecha)) {
+        const creditosFeriadosActivos = data.creditos_feriados_activos || [];
+        let clasesRestantes = data.clases_restantes || 0;
+        let updateData = {
+          feriados_disfrutados: feriadosDisfrutados.filter(f => f !== fecha)
+        };
+
+        // Si el crédito sigue sin gastar (existe en creditos_feriados_activos)
+        const vtoIndex = creditosFeriadosActivos.indexOf(vtoStr);
+        let mensajeNotif = `El feriado del ${day}/${month}/${year} ha sido cancelado y tu calendario ha vuelto a la normalidad.`;
+        
+        if (vtoIndex > -1) {
+          // Lo sacamos y devolvemos la clase
+          const nuevosCreditos = [...creditosFeriadosActivos];
+          nuevosCreditos.splice(vtoIndex, 1);
+          updateData.creditos_feriados_activos = nuevosCreditos;
+          updateData.clases_restantes = clasesRestantes + 1;
+          mensajeNotif += ' El crédito extra de recuperación ha sido revocado y se ha restaurado tu clase del abono.';
+        } else {
+          mensajeNotif += ' Como ya habías utilizado el crédito extra, lo hemos mantenido a tu favor.';
+        }
+        
+        batch.update(userDoc.ref, updateData);
+
+        // Crear notificación de reversión
+        const notifRef = doc(collection(db, 'notificaciones'));
+        batch.set(notifRef, {
+          usuarioId: userDoc.id,
+          tipo: 'feriado_revertido',
+          titulo: 'Feriado Cancelado',
+          mensaje: mensajeNotif,
+          leida: false,
+          fecha: new Date().toISOString()
+        });
+      }
+    });
+
+    await batch.commit();
+    return { success: true };
+  } catch (error) {
+    console.error('Error al borrar feriado:', error);
     return { success: false, error: error.message };
   }
 };

@@ -1,20 +1,45 @@
-import { useState } from 'react';
-import { Users, Search, ShieldAlert, MoreVertical, Mail, Phone, UserPlus, Archive, RefreshCcw, Check } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
+import { Users, Search, ShieldAlert, MoreVertical, Mail, Phone, UserPlus, Archive, RefreshCcw, Check, LogOut, Bell, XCircle, Trash2 } from 'lucide-react';
 import { db } from '../../config/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import { archivarUsuario, reactivarUsuario } from '../../services/authService';
+import { borrarNotificacion, borrarTodasLasNotificaciones } from '../../services/notificacionesService';
 import Modal from '../../components/common/Modal';
 
 import { useAdminStore } from '../../store/adminStore';
+import { useAuthStore } from '../../store/authStore';
 
 export default function GestionUsuarios() {
+  const location = useLocation();
+  const logout = useAuthStore(state => state.logout);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filtroRol, setFiltroRol] = useState('alumno'); // 'alumno', 'staff', 'inactivos'
+  const [filtroRol, setFiltroRol] = useState(location.state?.tab || 'alumno'); // 'alumno', 'staff', 'inactivos', 'notificaciones'
+
+  useEffect(() => {
+    if (location.state?.tab) {
+      setFiltroRol(location.state.tab);
+    }
+  }, [location.state]);
   const [menuAbiertoId, setMenuAbiertoId] = useState(null);
   const [isProfeModalOpen, setIsProfeModalOpen] = useState(false);
   const [isProfeSuccess, setIsProfeSuccess] = useState(false);
   const [isSavingProfe, setIsSavingProfe] = useState(false);
   const [profeForm, setProfeForm] = useState({ nombre: '', email: '', telefono: '' });
+  const [notificacionesAdmin, setNotificacionesAdmin] = useState([]);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, 'notificaciones'),
+      where('usuarioId', '==', 'admin')
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      notifs.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+      setNotificacionesAdmin(notifs);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const { usuarios, preRegistros, usuariosInactivos, preRegistrosInactivos } = useAdminStore();
   
@@ -41,8 +66,8 @@ export default function GestionUsuarios() {
   });
 
   const totales = {
-    alumnos: usuarios.filter(u => u.rol === 'alumno').length + preRegistros.length,
-    staff: usuarios.filter(u => ['admin', 'superadmin'].includes(u.rol)).length,
+    alumnos: usuarios.filter(u => u.rol === 'alumno').length + preRegistros.filter(p => !p.rol || p.rol === 'alumno').length,
+    staff: usuarios.filter(u => ['admin', 'superadmin'].includes(u.rol)).length + preRegistros.filter(p => ['admin', 'superadmin'].includes(p.rol)).length,
     inactivos: usuariosInactivos.length + preRegistrosInactivos.length
   };
 
@@ -111,12 +136,21 @@ export default function GestionUsuarios() {
               <p className="text-sm font-semibold text-gray-500 mt-1">Directorio del estudio</p>
             </div>
           </div>
-          <button 
-            onClick={() => setIsProfeModalOpen(true)}
-            className="bg-primary-pagos text-white p-3 rounded-full shadow-md active:scale-95 transition-transform"
-          >
-            <UserPlus size={20} />
-          </button>
+          <div className="flex space-x-3">
+            <button 
+              onClick={() => setIsProfeModalOpen(true)}
+              className="bg-primary-pagos text-white p-3 rounded-full shadow-md active:scale-95 transition-transform"
+            >
+              <UserPlus size={20} />
+            </button>
+            <button 
+              onClick={logout}
+              className="bg-red-50 text-red-500 p-3 rounded-full shadow-sm active:scale-95 transition-transform"
+              title="Cerrar Sesión"
+            >
+              <LogOut size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Buscador */}
@@ -151,22 +185,96 @@ export default function GestionUsuarios() {
           >
             Inactivos ({totales.inactivos})
           </button>
+          <button 
+            onClick={() => setFiltroRol('notificaciones')}
+            className={`flex-1 flex items-center justify-center py-2 text-sm font-bold rounded-lg transition-colors relative ${filtroRol === 'notificaciones' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
+          >
+            <Bell size={16} className="mr-1" />
+            Notificaciones
+            {notificacionesAdmin.length > 0 && (
+              <span className="absolute top-1 right-2 w-2.5 h-2.5 bg-red-500 rounded-full"></span>
+            )}
+          </button>
         </div>
       </header>
 
-      {/* Lista de Usuarios */}
+      {/* Lista de Notificaciones o Usuarios */}
       <div className="px-5 mt-6 space-y-4">
-        {usuariosFiltrados.map(usuario => {
-          const isStaff = ['admin', 'superadmin'].includes(usuario.rol);
-          const isInactive = usuario.estado === 'inactivo';
+        {filtroRol === 'notificaciones' ? (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-bold text-gray-800">Avisos del Sistema</h3>
+              {notificacionesAdmin.length > 0 && (
+                <button 
+                  onClick={() => {
+                    if(window.confirm('¿Borrar todas las notificaciones?')) {
+                      borrarTodasLasNotificaciones(db, 'admin');
+                    }
+                  }}
+                  className="flex items-center text-xs text-red-500 font-bold hover:bg-red-50 px-2 py-1 rounded transition-colors"
+                >
+                  <Trash2 size={14} className="mr-1" />
+                  Borrar todas
+                </button>
+              )}
+            </div>
+            
+            {notificacionesAdmin.length === 0 ? (
+              <div className="bg-white border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center shadow-sm">
+                <Bell className="mx-auto text-gray-300 mb-3" size={32} />
+                <p className="font-bold text-gray-600">No hay notificaciones nuevas</p>
+                <p className="text-sm text-gray-400 mt-1">Acá vas a ver avisos de pagos y nuevos alumnos.</p>
+              </div>
+            ) : (
+              notificacionesAdmin.map(notif => (
+                <div key={notif.id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm relative group transition-all hover:shadow-md">
+                  <button 
+                    onClick={() => borrarNotificacion(db, notif.id)}
+                    className="absolute top-2 right-2 text-gray-300 hover:text-red-500 transition-colors bg-white rounded-full p-1"
+                  >
+                    <XCircle size={20} />
+                  </button>
+                  <div className="flex items-start space-x-3 pr-8">
+                    <div className="bg-blue-50 text-blue-500 p-2 rounded-full">
+                      <Bell size={20} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-800 text-sm mb-1">{notif.titulo}</h4>
+                      <p className="text-sm text-gray-600">
+                        {(() => {
+                          const match = notif.mensaje.match(/^(.*?)( se ha registrado| ha avisado)(.*)$/i);
+                          if (match) {
+                            return (
+                              <>
+                                <span className="font-bold text-blue-600">{match[1]}</span>
+                                {match[2]}{match[3]}
+                              </>
+                            );
+                          }
+                          return notif.mensaje;
+                        })()}
+                      </p>
+                      <span className="text-[10px] text-gray-400 font-medium block mt-2">
+                        {new Date(notif.fecha).toLocaleString('es-AR')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          usuariosFiltrados.map(usuario => {
+            const isStaff = ['admin', 'superadmin'].includes(usuario.rol);
+            const isInactive = usuario.estado === 'inactivo';
 
-          return (
-            <div key={usuario.id} className={`bg-white p-4 rounded-2xl shadow-sm border ${isStaff ? 'border-primary-pagos border-opacity-30' : 'border-gray-100'} relative overflow-hidden transition-all hover:shadow-md`}>
-              
-              {/* Borde izquierdo decorativo para staff */}
-              {isStaff && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary-pagos"></div>}
+            return (
+              <div key={usuario.id} className={`bg-white p-4 rounded-2xl shadow-sm border ${isStaff ? 'border-primary-pagos border-opacity-30' : 'border-gray-100'} relative overflow-hidden transition-all hover:shadow-md`}>
+                
+                {/* Borde izquierdo decorativo para staff */}
+                {isStaff && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary-pagos"></div>}
 
-              <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-4">
                   {/* Avatar */}
                   <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-lg ${
@@ -261,9 +369,10 @@ export default function GestionUsuarios() {
               </div>
             </div>
           );
-        })}
+        })
+        )}
 
-        {usuariosFiltrados.length === 0 && (
+        {usuariosFiltrados.length === 0 && filtroRol !== 'notificaciones' && (
           <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-3xl p-12 text-center shadow-sm mt-4">
             <Users className="mx-auto text-gray-300 mb-4" size={48} />
             <p className="font-bold text-gray-700 text-lg mb-1">Sin usuarios</p>

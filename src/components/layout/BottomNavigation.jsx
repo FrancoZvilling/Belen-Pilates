@@ -1,9 +1,26 @@
+import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { Calendar, CheckCircle, CreditCard, Users, Home, UserPlus } from 'lucide-react';
+import { db } from '../../config/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
 export default function BottomNavigation() {
   const role = useAuthStore(state => state.role);
+  const [hasAdminNotifs, setHasAdminNotifs] = useState(false);
+
+  useEffect(() => {
+    if (role === 'superadmin') {
+      const q = query(
+        collection(db, 'notificaciones'),
+        where('usuarioId', '==', 'admin')
+      );
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        setHasAdminNotifs(!snapshot.empty);
+      });
+      return () => unsubscribe();
+    }
+  }, [role]);
 
   // Define nav items based on role
   let navItems = [];
@@ -38,13 +55,19 @@ export default function BottomNavigation() {
           <NavLink
             key={item.to}
             to={item.to}
+            state={item.label === 'Usuarios' && hasAdminNotifs ? { tab: 'notificaciones' } : {}}
             className={({ isActive }) => 
-              `flex flex-col items-center justify-center w-full h-full transition-colors ${
+              `flex flex-col items-center justify-center w-full h-full transition-colors relative ${
                 isActive ? item.activeColor : 'text-gray-400'
               }`
             }
           >
-            <item.icon size={24} className="mb-1" />
+            <div className="relative">
+              <item.icon size={24} className="mb-1" />
+              {item.label === 'Usuarios' && hasAdminNotifs && (
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>
+              )}
+            </div>
             <span className="text-xs font-medium">{item.label}</span>
           </NavLink>
         ))}
