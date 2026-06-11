@@ -54,27 +54,53 @@ export default function AsistenciasDiarias() {
     });
   }, [agendasHoy]);
 
-  const [classIndex, setClassIndex] = useState(0);
-
-  // Efecto para auto-seleccionar la clase más próxima en el montaje inicial
-  useEffect(() => {
-    if (clasesDelDia.length > 0) {
-      let foundIndex = -1;
-      for (let i = 0; i < clasesDelDia.length; i++) {
-        const classHourInt = parseInt(clasesDelDia[i].split(':')[0]);
-        if (currentHourDecimal < classHourInt + 1) {
-          foundIndex = i;
-          break;
+  const [classIndex, setClassIndex] = useState(() => {
+    try {
+      const saved = localStorage.getItem('lastSelectedClass');
+      if (saved) {
+        const { date, hora } = JSON.parse(saved);
+        if (date === fechaIsoString && hora) {
+          const idx = clasesDelDia.indexOf(hora);
+          if (idx !== -1) return idx;
         }
       }
-      
-      if (foundIndex !== -1) {
-        setClassIndex(foundIndex);
-      } else {
+    } catch(e) {}
+    return -1; // -1 indica que hay que autodetectar
+  });
+
+  // Efecto para auto-seleccionar la clase más próxima en el montaje inicial si no hay guardada
+  useEffect(() => {
+    if (clasesDelDia.length > 0) {
+      if (classIndex === -1) {
+        let foundIndex = -1;
+        for (let i = 0; i < clasesDelDia.length; i++) {
+          const classHourInt = parseInt(clasesDelDia[i].split(':')[0]);
+          if (currentHourDecimal < classHourInt + 1) {
+            foundIndex = i;
+            break;
+          }
+        }
+        
+        if (foundIndex !== -1) {
+          setClassIndex(foundIndex);
+        } else {
+          setClassIndex(clasesDelDia.length - 1);
+        }
+      } else if (classIndex >= clasesDelDia.length) {
         setClassIndex(clasesDelDia.length - 1);
       }
     }
-  }, [clasesDelDia.length, currentHourDecimal]);
+  }, [clasesDelDia.length, currentHourDecimal, classIndex]);
+
+  // Guardar en localStorage cada vez que el profe cambia la clase manualmente
+  useEffect(() => {
+    if (clasesDelDia[classIndex]) {
+      localStorage.setItem('lastSelectedClass', JSON.stringify({
+        date: fechaIsoString,
+        hora: clasesDelDia[classIndex]
+      }));
+    }
+  }, [classIndex, clasesDelDia, fechaIsoString]);
 
   // Datos de la clase actual
   const horaSeleccionada = clasesDelDia[classIndex];
