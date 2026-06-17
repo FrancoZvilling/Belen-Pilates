@@ -195,7 +195,7 @@ export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14) => {
           tipo: 'Recupero / Extra',
           isPresente: registroHistorial?.estado === 'presente',
           isAusente: registroHistorial?.estado === 'ausente',
-          estadoEspecial: userData.clases_restantes <= 0 ? 'ausente_pago' : null,
+          estadoEspecial: null, // Las clases extra/recupero ya se pagaron con un crédito, no se bloquean por falta de pago
           isCancelado: false,
           esIntercambiable: false // Los turnos extra NO se pueden cambiar otra vez
         });

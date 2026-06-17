@@ -134,16 +134,22 @@ export const intercambiarTurno = async (db, uid, idTurnoDestino, idTurnoOrigen) 
       const canceladas = data.clases_canceladas || [];
       const extras = data.clases_extra || [];
 
+      const clasesRestantes = data.clases_restantes ?? 0;
+
       if (canceladas.includes(idTurnoOrigen)) {
         throw new Error("Ya cancelaste el turno de origen anteriormente.");
       }
       if (extras.includes(idTurnoDestino)) {
         throw new Error("Ya estás anotado en el turno de destino.");
       }
+      if (clasesRestantes <= 0) {
+        throw new Error("No tienes clases suficientes para realizar este cambio.");
+      }
 
       transaction.update(userRef, {
         clases_canceladas: [...canceladas, idTurnoOrigen],
-        clases_extra: [...extras, idTurnoDestino]
+        clases_extra: [...extras, idTurnoDestino],
+        clases_restantes: clasesRestantes - 1
       });
     });
     return { success: true };
@@ -360,7 +366,11 @@ export const ejecutarBarridoInasistencias = async (db, usuariosActivos) => {
   for (const usuario of usuariosActivos) {
     if (usuario.rol !== 'alumno') continue;
 
-    const clasesDeHoy = usuario.turnos_fijos?.filter(t => t.dia === todayStringLargo) || [];
+    const fijosDeHoy = usuario.turnos_fijos?.filter(t => t.dia === todayStringLargo).map(t => ({ hora: t.hora, esExtra: false })) || [];
+    const extrasDeHoy = usuario.clases_extra?.filter(e => e.startsWith(fechaIsoString + '_')).map(e => ({ hora: e.split('_')[1], esExtra: true })) || [];
+    
+    const clasesDeHoy = [...fijosDeHoy, ...extrasDeHoy];
+    
     if (clasesDeHoy.length === 0) continue;
 
     let clasesRestantes = usuario.clases_restantes ?? 0;
@@ -372,21 +382,34 @@ export const ejecutarBarridoInasistencias = async (db, usuariosActivos) => {
       
       // Si ya pasó 1 HORA desde el comienzo de la clase
       if (currentHourDecimal >= classHourInt + 1) {
+        const idTurnoUnico = `${fechaIsoString}_${clase.hora}`;
+        
+        // Si es fijo, verificamos si fue cancelado o es feriado. Las extra no se pueden cancelar.
+        if (!clase.esExtra) {
+          if (usuario.clases_canceladas?.includes(idTurnoUnico)) continue;
+          if (usuario.feriados_disfrutados?.includes(fechaIsoString)) continue;
+        }
         
         // Verificar si ya hay un registro (presente o ausente) para esta clase hoy
         const yaRegistrado = historial.some(h => h.fecha === fechaIsoString && h.hora === clase.hora);
         
-        if (!yaRegistrado && clasesRestantes > 0) {
-          // Si no está registrado y tiene clases, le clavamos el ausente automático
-          historial.push({
-            fecha: fechaIsoString,
-            hora: clase.hora,
-            estado: 'ausente',
-            motivo: 'automatico_lazy_sweep',
-            timestamp: new Date().toISOString()
-          });
-          clasesRestantes -= 1;
-          userModified = true;
+        if (!yaRegistrado) {
+          // Si es extra o le quedan clases, marcamos el ausente
+          if (clase.esExtra || clasesRestantes > 0) {
+            historial.push({
+              fecha: fechaIsoString,
+              hora: clase.hora,
+              estado: 'ausente',
+              motivo: 'automatico_lazy_sweep',
+              timestamp: new Date().toISOString()
+            });
+            
+            // Solo restamos clases_restantes si es turno fijo
+            if (!clase.esExtra) {
+              clasesRestantes -= 1;
+            }
+            userModified = true;
+          }
         }
       }
     }
