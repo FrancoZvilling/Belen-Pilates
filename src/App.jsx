@@ -12,6 +12,7 @@ import Login from './pages/auth/Login';
 import DashboardAlumno from './pages/alumno/DashboardAlumno';
 import TurnosAlumno from './pages/alumno/TurnosAlumno';
 import PagosAlumno from './pages/alumno/PagosAlumno';
+import PWAInstallPrompt from './components/layout/PWAInstallPrompt';
 
 // Admin Pages
 import AsistenciasDiarias from './pages/admin/AsistenciasDiarias';
@@ -63,6 +64,7 @@ function App() {
 
   return (
     <Router>
+      <PWAInstallPrompt />
       <div className="min-h-screen bg-gray-50 pb-16">
         <Routes>
           {/* Public Routes */}
