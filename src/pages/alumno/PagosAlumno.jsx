@@ -186,27 +186,34 @@ export default function PagosAlumno() {
                 <Building size={20} />
               </div>
               <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Banco</p>
-                <p className="font-bold text-gray-800">Banco Santander Río</p>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Banco / Entidad</p>
+                <p className="font-bold text-gray-800">Ualá Bank S.A.U.</p>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-3 rounded-xl flex justify-between items-center border border-gray-100">
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Titular</p>
+                <p className="font-bold text-gray-700 capitalize">Maria Belen Sanchez Tobares</p>
               </div>
             </div>
             
             <div className="bg-gray-50 p-3 rounded-xl flex justify-between items-center border border-gray-100">
               <div>
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Alias</p>
-                <p className="font-bold text-gray-700">BELEN.PILATES.OK</p>
+                <p className="font-bold text-gray-700">Belenpilates</p>
               </div>
-              <button onClick={() => handleCopy('BELEN.PILATES.OK')} className="p-2 text-primary-pagos hover:bg-primary-pagos hover:bg-opacity-10 rounded-lg transition-colors">
+              <button onClick={() => handleCopy('Belenpilates')} className="p-2 text-primary-pagos hover:bg-primary-pagos hover:bg-opacity-10 rounded-lg transition-colors">
                 <Copy size={18} />
               </button>
             </div>
 
             <div className="bg-gray-50 p-3 rounded-xl flex justify-between items-center border border-gray-100">
               <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">CBU</p>
-                <p className="font-bold text-gray-700">0720000788000012345678</p>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">CVU / CBU</p>
+                <p className="font-bold text-gray-700">3840200500000005631225</p>
               </div>
-              <button onClick={() => handleCopy('0720000788000012345678')} className="p-2 text-primary-pagos hover:bg-primary-pagos hover:bg-opacity-10 rounded-lg transition-colors">
+              <button onClick={() => handleCopy('3840200500000005631225')} className="p-2 text-primary-pagos hover:bg-primary-pagos hover:bg-opacity-10 rounded-lg transition-colors">
                 <Copy size={18} />
               </button>
             </div>
