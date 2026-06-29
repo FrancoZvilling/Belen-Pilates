@@ -1,9 +1,19 @@
 import { auth, db } from '../config/firebase';
-import { GoogleAuthProvider, signInWithPopup, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, setPersistence, browserLocalPersistence, browserSessionPersistence, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, getDoc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { crearNotificacion } from './notificacionesService';
 
 const googleProvider = new GoogleAuthProvider();
+
+export const resetPassword = async (email) => {
+  try {
+    await sendPasswordResetEmail(auth, email);
+    return true;
+  } catch (error) {
+    console.error("Error sending password reset email", error);
+    throw error;
+  }
+};
 
 export const loginWithGoogle = async () => {
   try {

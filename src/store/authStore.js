@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { auth, db } from '../config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
-import { loginWithGoogle, logout as logoutFirebase, loginWithEmail as loginEmailService, registerWithEmail as registerEmailService } from '../services/authService';
+import { loginWithGoogle, logout as logoutFirebase, loginWithEmail as loginEmailService, registerWithEmail as registerEmailService, resetPassword as resetPasswordService } from '../services/authService';
 import { useAdminStore } from './adminStore';
 
 export const useAuthStore = create((set) => ({
@@ -114,4 +114,13 @@ export const useAuthStore = create((set) => ({
       };
     });
   },
+
+  sendPasswordReset: async (email) => {
+    try {
+      await resetPasswordService(email);
+      return true;
+    } catch (error) {
+      throw error;
+    }
+  }
 }));

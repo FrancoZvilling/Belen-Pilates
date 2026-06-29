@@ -5,18 +5,51 @@ import { Mail, Lock, Eye, EyeOff, User, AlertCircle } from 'lucide-react';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, loginWithEmail, registerWithEmail } = useAuthStore();
+  const { login, loginWithEmail, registerWithEmail, sendPasswordReset } = useAuthStore();
   
   const [isRegistering, setIsRegistering] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   
+  // Password Reset State
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetMessage, setResetMessage] = useState(null);
+  const [resetError, setResetError] = useState(null);
+
   // Form State
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    if (!resetEmail) {
+      setResetError("Por favor ingresa tu correo.");
+      return;
+    }
+    try {
+      setResetLoading(true);
+      setResetError(null);
+      setResetMessage(null);
+      await sendPasswordReset(resetEmail);
+      setResetMessage("Te hemos enviado un correo para restablecer tu contraseña. Revisa tu bandeja de entrada o SPAM.");
+    } catch (err) {
+      console.error(err);
+      if (err.code === 'auth/user-not-found') {
+        setResetError("No hay ninguna cuenta registrada con este correo.");
+      } else if (err.code === 'auth/invalid-email') {
+        setResetError("El formato del correo es inválido.");
+      } else {
+        setResetError("Ocurrió un error al intentar enviar el correo.");
+      }
+    } finally {
+      setResetLoading(false);
+    }
+  };
 
   const handleGoogleLogin = async () => {
     try {
@@ -183,7 +216,7 @@ export default function Login() {
                 <span className="text-sm font-medium text-gray-600 group-hover:text-gray-800 transition-colors">Recordarme</span>
               </label>
               
-              <button type="button" className="text-sm font-bold text-primary-turnos hover:text-blue-600 transition-colors">
+              <button type="button" onClick={() => setShowResetModal(true)} className="text-sm font-bold text-primary-turnos hover:text-blue-600 transition-colors">
                 ¿Olvidaste tu clave?
               </button>
             </div>
@@ -220,6 +253,80 @@ export default function Login() {
           </button>
         </p>
       </div>
+
+      {/* Password Reset Modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900 bg-opacity-50 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl relative">
+            <button 
+              onClick={() => {
+                setShowResetModal(false);
+                setResetMessage(null);
+                setResetError(null);
+                setResetEmail('');
+              }}
+              className="absolute top-4 right-4 text-gray-400 hover:bg-gray-100 p-2 rounded-full transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            
+            <h3 className="text-xl font-black text-gray-800 mb-2">Recuperar Contraseña</h3>
+            <p className="text-sm text-gray-500 mb-6">Ingresa tu correo electrónico y te enviaremos un enlace para que puedas elegir una nueva contraseña.</p>
+
+            {resetError && (
+              <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl flex items-start space-x-2 text-sm font-medium border border-red-100">
+                <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
+                <span>{resetError}</span>
+              </div>
+            )}
+            
+            {resetMessage ? (
+              <div className="mb-4 p-4 bg-green-50 text-green-700 rounded-xl flex flex-col items-center justify-center text-center space-y-2 border border-green-100">
+                <svg className="w-10 h-10 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="font-medium text-sm">{resetMessage}</span>
+                <button 
+                  onClick={() => setShowResetModal(false)}
+                  className="mt-2 text-green-700 font-bold underline text-sm"
+                >
+                  Volver al Login
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleResetPassword}>
+                <div className="mb-4">
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                      <Mail size={18} className="text-gray-400" />
+                    </div>
+                    <input 
+                      type="email" 
+                      value={resetEmail}
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:bg-white focus:ring-2 focus:ring-primary-turnos focus:border-transparent transition-all text-gray-700 font-medium"
+                      placeholder="tu@correo.com"
+                    />
+                  </div>
+                </div>
+                <button 
+                  type="submit"
+                  disabled={resetLoading}
+                  className="w-full bg-primary-turnos hover:bg-blue-600 text-white font-bold py-3 rounded-xl active:scale-[0.98] transition-all flex items-center justify-center shadow-md"
+                >
+                  {resetLoading ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    'Enviar Enlace'
+                  )}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
 
     </div>
   );
