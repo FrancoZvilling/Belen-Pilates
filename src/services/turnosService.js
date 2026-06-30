@@ -526,7 +526,7 @@ export const registrarPagoAlumno = async (db, uid, monto, nombreAdmin = "Admin")
 /**
  * Actualiza los precios globales de los planes.
  * @param {Object} db - Firestore
- * @param {Object} nuevosPrecios - { plan_8_clases: 15000, plan_12_clases: 20000 }
+ * @param {Object} nuevosPrecios - { plan_4_clases: 8000, plan_8_clases: 15000, plan_12_clases: 20000 }
  */
 export const actualizarPrecios = async (db, nuevosPrecios) => {
   const configRef = doc(db, 'configuracion', 'precios');

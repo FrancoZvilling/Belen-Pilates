@@ -11,7 +11,7 @@ export const useAdminStore = create((set) => ({
   preRegistros: [],
   preRegistrosInactivos: [],
   pagosHistorial: [],
-  precios: { plan_8_clases: 15000, plan_12_clases: 20000 },
+  precios: { plan_4_clases: 8000, plan_8_clases: 15000, plan_12_clases: 20000 },
   isLoading: true,
   unsubscribeUsuarios: null,
   unsubscribePreRegistros: null,

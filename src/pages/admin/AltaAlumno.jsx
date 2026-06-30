@@ -28,8 +28,8 @@ export default function AltaAlumno() {
   }));
 
   const [formData, setFormData] = useState({ nombre: '', email: '', telefono: '' });
-  const [plan, setPlan] = useState(8); // 8 o 12
-  const maxSelecciones = plan === 8 ? 2 : 3;
+  const [plan, setPlan] = useState(8); // 4, 8 o 12
+  const maxSelecciones = plan === 4 ? 1 : (plan === 8 ? 2 : 3);
   const [seleccionados, setSeleccionados] = useState([]);
   
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
@@ -42,7 +42,7 @@ export default function AltaAlumno() {
   const handlePlanChange = (nuevoPlan) => {
     setPlan(nuevoPlan);
     // Si cambia el plan y se pasa del limite, resetear selecciones
-    const nuevoMax = nuevoPlan === 8 ? 2 : 3;
+    const nuevoMax = nuevoPlan === 4 ? 1 : (nuevoPlan === 8 ? 2 : 3);
     if (seleccionados.length > nuevoMax) {
       setSeleccionados([]);
     }
@@ -164,10 +164,22 @@ export default function AltaAlumno() {
           </div>
 
           <h2 className="text-lg font-bold text-gray-800 mt-8 mb-4">Plan Mensual</h2>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <button 
+              type="button"
+              onClick={() => handlePlanChange(4)}
+              className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center ${
+                plan === 4 ? 'border-primary-turnos bg-primary-turnos bg-opacity-10' : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <span className={`block text-2xl font-black ${plan === 4 ? 'text-primary-turnos' : 'text-gray-600'}`}>4</span>
+              <span className={`text-sm font-bold ${plan === 4 ? 'text-primary-turnos' : 'text-gray-400'}`}>Clases / mes</span>
+              <span className="block text-xs text-gray-500 mt-1">(1 vez por semana)</span>
+            </button>
+            <button 
+              type="button"
               onClick={() => handlePlanChange(8)}
-              className={`p-4 rounded-xl border-2 transition-all ${
+              className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center ${
                 plan === 8 ? 'border-primary-turnos bg-primary-turnos bg-opacity-10' : 'border-gray-200 bg-white hover:border-gray-300'
               }`}
             >
@@ -176,8 +188,9 @@ export default function AltaAlumno() {
               <span className="block text-xs text-gray-500 mt-1">(2 veces por semana)</span>
             </button>
             <button 
+              type="button"
               onClick={() => handlePlanChange(12)}
-              className={`p-4 rounded-xl border-2 transition-all ${
+              className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center ${
                 plan === 12 ? 'border-primary-turnos bg-primary-turnos bg-opacity-10' : 'border-gray-200 bg-white hover:border-gray-300'
               }`}
             >

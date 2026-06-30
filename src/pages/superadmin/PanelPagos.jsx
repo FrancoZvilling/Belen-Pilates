@@ -20,6 +20,7 @@ export default function PanelPagos() {
 
   // Modal de Configuracion
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [nuevoPrecio4, setNuevoPrecio4] = useState(precios?.plan_4_clases || 0);
   const [nuevoPrecio8, setNuevoPrecio8] = useState(precios?.plan_8_clases || 0);
   const [nuevoPrecio12, setNuevoPrecio12] = useState(precios?.plan_12_clases || 0);
 
@@ -84,7 +85,7 @@ export default function PanelPagos() {
   const handleConfirmarPago = async () => {
     if (alumnoSeleccionado) {
       setIsProcessing(true);
-      const montoAcobrar = (alumnoSeleccionado.plan === 12) ? precios.plan_12_clases : precios.plan_8_clases;
+      const montoAcobrar = (alumnoSeleccionado.plan === 4) ? precios.plan_4_clases : (alumnoSeleccionado.plan === 12) ? precios.plan_12_clases : precios.plan_8_clases;
       const res = await registrarPagoAlumno(db, alumnoSeleccionado.id, montoAcobrar, "SuperAdmin");
       setIsProcessing(false);
       if (res.success) {
@@ -99,6 +100,7 @@ export default function PanelPagos() {
   const handleGuardarConfig = async () => {
     setIsProcessing(true);
     const res = await actualizarPrecios(db, {
+      plan_4_clases: parseInt(nuevoPrecio4),
       plan_8_clases: parseInt(nuevoPrecio8),
       plan_12_clases: parseInt(nuevoPrecio12)
     });
@@ -136,6 +138,7 @@ export default function PanelPagos() {
         <div className="flex space-x-2">
           <button 
             onClick={() => {
+              setNuevoPrecio4(precios?.plan_4_clases || 0);
               setNuevoPrecio8(precios?.plan_8_clases || 0);
               setNuevoPrecio12(precios?.plan_12_clases || 0);
               setIsConfigModalOpen(true);
@@ -287,7 +290,7 @@ export default function PanelPagos() {
               <div className="text-right">
                 <p className="text-sm text-gray-500 mb-1">Monto a cobrar</p>
                 <p className="font-black text-2xl text-primary-pagos">
-                  ${(alumnoSeleccionado.plan === 12 ? precios?.plan_12_clases : precios?.plan_8_clases)?.toLocaleString('es-AR')}
+                  ${(alumnoSeleccionado.plan === 4 ? precios?.plan_4_clases : alumnoSeleccionado.plan === 12 ? precios?.plan_12_clases : precios?.plan_8_clases)?.toLocaleString('es-AR')}
                 </p>
               </div>
             </div>
@@ -326,6 +329,20 @@ export default function PanelPagos() {
         title="Configuración de Precios"
       >
         <div className="py-2 space-y-5">
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">Precio Plan 4 Clases (1x sem)</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <DollarSign className="h-5 w-5 text-gray-400" />
+              </div>
+              <input
+                type="number"
+                value={nuevoPrecio4}
+                onChange={(e) => setNuevoPrecio4(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-pagos outline-none"
+              />
+            </div>
+          </div>
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">Precio Plan 8 Clases (2x sem)</label>
             <div className="relative">
