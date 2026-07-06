@@ -540,7 +540,8 @@ export const actualizarPrecios = async (db, nuevosPrecios) => {
 };
 
 /**
- * Declara un feriado, cancela las clases de ese día y otorga un crédito especial a los alumnos con turnos fijos.
+ * Declara un feriado y cancela las clases de ese día.
+ * Al declarar feriado NO se otorgan créditos, simplemente el alumno pierde la clase.
  * @param {Object} db - Firestore
  * @param {string} fecha - Fecha del feriado 'YYYY-MM-DD'
  */
@@ -555,11 +556,6 @@ export const declararFeriado = async (db, fecha) => {
     if (['Domingo', 'Sábado'].includes(diaSemana)) {
       return { success: false, error: 'No se puede declarar feriado un fin de semana.' };
     }
-
-    // Calcular fecha de vencimiento del crédito (30 días)
-    const vtoObj = new Date(year, month - 1, day);
-    vtoObj.setDate(vtoObj.getDate() + 30);
-    const vtoStr = `${vtoObj.getFullYear()}-${String(vtoObj.getMonth() + 1).padStart(2, '0')}-${String(vtoObj.getDate()).padStart(2, '0')}`;
 
     const batch = writeBatch(db);
 
@@ -593,14 +589,12 @@ export const declararFeriado = async (db, fecha) => {
       const tieneTurnoFijo = turnosFijos.some(t => t.dia === diaSemana);
       
       if (tieneTurnoFijo) {
-        const feriadosActivos = data.creditos_feriados_activos || [];
         const feriadosDisfrutados = data.feriados_disfrutados || [];
         const clasesRestantes = data.clases_restantes || 0;
         
         batch.update(userDoc.ref, {
-          creditos_feriados_activos: [...feriadosActivos, vtoStr],
           feriados_disfrutados: [...feriadosDisfrutados, fecha],
-          clases_restantes: Math.max(0, clasesRestantes - 1) // Se descuenta la clase para cambiarla por el crédito
+          clases_restantes: Math.max(0, clasesRestantes - 1) // Pierde la clase
         });
 
         // Crear notificación de feriado
@@ -610,7 +604,7 @@ export const declararFeriado = async (db, fecha) => {
           usuarioId: userDoc.id,
           tipo: 'feriado',
           titulo: 'Día Feriado Declarado',
-          mensaje: `Se declaró feriado el día ${d}/${m}/${y}. Hemos devuelto tu clase y cuentas con 1 crédito extra para recuperar.`,
+          mensaje: `Se declaró feriado el día ${d}/${m}/${y}. La clase queda suspendida.`,
           leida: false,
           fecha: new Date().toISOString()
         });
@@ -626,7 +620,7 @@ export const declararFeriado = async (db, fecha) => {
 };
 
 /**
- * Borra un feriado declarado y revierte los créditos si aún no han sido gastados.
+ * Borra un feriado declarado y devuelve la clase a los alumnos afectados.
  * @param {Object} db - Firestore
  * @param {string} fecha - Fecha del feriado 'YYYY-MM-DD'
  */
@@ -640,9 +634,6 @@ export const borrarFeriado = async (db, fecha) => {
     }
 
     const [year, month, day] = fecha.split('-').map(Number);
-    const vtoObj = new Date(year, month - 1, day);
-    vtoObj.setDate(vtoObj.getDate() + 30);
-    const vtoStr = `${vtoObj.getFullYear()}-${String(vtoObj.getMonth() + 1).padStart(2, '0')}-${String(vtoObj.getDate()).padStart(2, '0')}`;
 
     const batch = writeBatch(db);
     batch.delete(feriadoRef);
@@ -660,26 +651,13 @@ export const borrarFeriado = async (db, fecha) => {
       
       // Si a este alumno se le aplicó el feriado
       if (feriadosDisfrutados.includes(fecha)) {
-        const creditosFeriadosActivos = data.creditos_feriados_activos || [];
         let clasesRestantes = data.clases_restantes || 0;
         let updateData = {
-          feriados_disfrutados: feriadosDisfrutados.filter(f => f !== fecha)
+          feriados_disfrutados: feriadosDisfrutados.filter(f => f !== fecha),
+          clases_restantes: clasesRestantes + 1
         };
 
-        // Si el crédito sigue sin gastar (existe en creditos_feriados_activos)
-        const vtoIndex = creditosFeriadosActivos.indexOf(vtoStr);
-        let mensajeNotif = `El feriado del ${day}/${month}/${year} ha sido cancelado y tu calendario ha vuelto a la normalidad.`;
-        
-        if (vtoIndex > -1) {
-          // Lo sacamos y devolvemos la clase
-          const nuevosCreditos = [...creditosFeriadosActivos];
-          nuevosCreditos.splice(vtoIndex, 1);
-          updateData.creditos_feriados_activos = nuevosCreditos;
-          updateData.clases_restantes = clasesRestantes + 1;
-          mensajeNotif += ' El crédito extra de recuperación ha sido revocado y se ha restaurado tu clase del abono.';
-        } else {
-          mensajeNotif += ' Como ya habías utilizado el crédito extra, lo hemos mantenido a tu favor.';
-        }
+        let mensajeNotif = `El feriado del ${day}/${month}/${year} ha sido cancelado y tu calendario ha vuelto a la normalidad. Se ha restaurado tu clase del abono.`;
         
         batch.update(userDoc.ref, updateData);
 

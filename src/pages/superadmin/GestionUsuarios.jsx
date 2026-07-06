@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Users, Search, ShieldAlert, MoreVertical, Mail, Phone, UserPlus, Archive, RefreshCcw, Check, LogOut, Bell, XCircle, Trash2 } from 'lucide-react';
+import { Users, Search, ShieldAlert, MoreVertical, Mail, Phone, UserPlus, Archive, RefreshCcw, Check, LogOut, Bell, XCircle, Trash2, Calendar } from 'lucide-react';
 import { db } from '../../config/firebase';
 import { doc, setDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import { archivarUsuario, reactivarUsuario } from '../../services/authService';
@@ -9,12 +9,16 @@ import Modal from '../../components/common/Modal';
 
 import { useAdminStore } from '../../store/adminStore';
 import { useAuthStore } from '../../store/authStore';
+import ModificarHorariosModal from '../../components/admin/ModificarHorariosModal';
 
 export default function GestionUsuarios() {
   const location = useLocation();
   const logout = useAuthStore(state => state.logout);
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroRol, setFiltroRol] = useState(location.state?.tab || 'alumno'); // 'alumno', 'staff', 'inactivos', 'notificaciones'
+
+  const [isModificarHorariosOpen, setIsModificarHorariosOpen] = useState(false);
+  const [alumnoEditandoHorarios, setAlumnoEditandoHorarios] = useState(null);
 
   useEffect(() => {
     if (location.state?.tab) {
@@ -342,13 +346,28 @@ export default function GestionUsuarios() {
                           Reactivar Usuario
                         </button>
                       ) : (
-                        <button 
-                          onClick={() => handleArchivar(usuario)}
-                          className="w-full text-left px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 flex items-center transition-colors"
-                        >
-                          <Archive size={16} className="mr-2" />
-                          Archivar Usuario
-                        </button>
+                        <>
+                          {usuario.rol === 'alumno' && (
+                            <button 
+                              onClick={() => {
+                                setAlumnoEditandoHorarios(usuario);
+                                setIsModificarHorariosOpen(true);
+                                setMenuAbiertoId(null);
+                              }}
+                              className="w-full text-left px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 flex items-center transition-colors border-b border-gray-50"
+                            >
+                              <Calendar size={16} className="mr-2 text-primary-turnos" />
+                              Modificar horarios
+                            </button>
+                          )}
+                          <button 
+                            onClick={() => handleArchivar(usuario)}
+                            className="w-full text-left px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 flex items-center transition-colors"
+                          >
+                            <Archive size={16} className="mr-2" />
+                            Archivar Usuario
+                          </button>
+                        </>
                       )}
                     </div>
                   )}
@@ -455,6 +474,13 @@ export default function GestionUsuarios() {
           </button>
         </div>
       </Modal>
+
+      {/* Modal: Modificar Horarios */}
+      <ModificarHorariosModal
+        isOpen={isModificarHorariosOpen}
+        onClose={() => setIsModificarHorariosOpen(false)}
+        alumno={alumnoEditandoHorarios}
+      />
 
     </div>
   );
