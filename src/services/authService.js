@@ -119,22 +119,69 @@ export const loginWithEmail = async (email, password, rememberMe) => {
     const userRef = doc(db, 'usuarios', user.uid);
     const userSnap = await getDoc(userRef);
 
-    if (userSnap.exists()) {
+    if (!userSnap.exists()) {
+      // Auto-reparación: Si el documento de usuario no existe pero pudo iniciar sesión,
+      // probablemente hubo un error al registrarse. Buscamos en pre_registros.
+      const emailId = email.trim().toLowerCase();
+      const preRegistroRef = doc(db, 'pre_registros', emailId);
+      const preRegistroSnap = await getDoc(preRegistroRef);
+
+      if (preRegistroSnap.exists()) {
+        const preData = preRegistroSnap.data();
+        const rolAsignado = preData.rol || 'alumno';
+
+        const userDocData = {
+          nombre: preData.nombre || user.displayName || email.split('@')[0],
+          email: emailId,
+          telefono: preData.telefono || '',
+          rol: rolAsignado,
+          estado: 'activo',
+          fecha_registro: new Date().toISOString()
+        };
+
+        if (rolAsignado === 'alumno') {
+          userDocData.plan = preData.plan || 8;
+          userDocData.clases_restantes = preData.plan || 8;
+          userDocData.turnos_fijos = preData.turnos_fijos || preData.turnosFijos || [];
+        }
+
+        await setDoc(userRef, userDocData);
+        await deleteDoc(preRegistroRef);
+
+        if (rolAsignado === 'alumno') {
+          await crearNotificacion(
+            db, 
+            'admin', 
+            'nuevo_alumno', 
+            'Nuevo alumno registrado', 
+            `${userDocData.nombre} se ha registrado como alumno.`
+          );
+        }
+
+        return {
+          uid: user.uid,
+          nombre: userDocData.nombre,
+          email: emailId,
+          role: rolAsignado
+        };
+      } else {
+        await signOut(auth);
+        throw new Error('Tu cuenta no tiene datos asociados en el sistema. Comunícate con un profesor.');
+      }
+    } else {
       const userData = userSnap.data();
       if (userData.estado === 'inactivo') {
         await signOut(auth);
         throw new Error('Esta cuenta ha sido desactivada por el administrador.');
       }
+      
+      return {
+        uid: user.uid,
+        nombre: user.displayName || userData.nombre || email.split('@')[0],
+        email: user.email,
+        role: userData.rol || 'alumno'
+      };
     }
-
-    const role = userSnap.exists() ? (userSnap.data().rol || 'alumno') : 'alumno';
-
-    return {
-      uid: user.uid,
-      nombre: user.displayName || email.split('@')[0],
-      email: user.email,
-      role: role
-    };
   } catch (error) {
     console.error("Error en login con Email:", error);
     throw error;

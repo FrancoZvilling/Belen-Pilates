@@ -353,12 +353,8 @@ export const ejecutarBarridoInasistencias = async (db, usuariosActivos) => {
   const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
   const argDate = new Date(utc + (3600000 * -3));
 
-  const dayIndex = argDate.getDay();
-  const diasMapLargo = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-  const todayStringLargo = diasMapLargo[dayIndex];
-  
-  const fechaIsoString = `${argDate.getFullYear()}-${String(argDate.getMonth()+1).padStart(2,'0')}-${String(argDate.getDate()).padStart(2,'0')}`;
   const currentHourDecimal = argDate.getHours() + (argDate.getMinutes() / 60);
+  const diasMapLargo = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
   const batch = writeBatch(db);
   let modificaciones = 0;
@@ -366,49 +362,69 @@ export const ejecutarBarridoInasistencias = async (db, usuariosActivos) => {
   for (const usuario of usuariosActivos) {
     if (usuario.rol !== 'alumno') continue;
 
-    const fijosDeHoy = usuario.turnos_fijos?.filter(t => t.dia === todayStringLargo).map(t => ({ hora: t.hora, esExtra: false })) || [];
-    const extrasDeHoy = usuario.clases_extra?.filter(e => e.startsWith(fechaIsoString + '_')).map(e => ({ hora: e.split('_')[1], esExtra: true })) || [];
-    
-    const clasesDeHoy = [...fijosDeHoy, ...extrasDeHoy];
-    
-    if (clasesDeHoy.length === 0) continue;
-
     let clasesRestantes = usuario.clases_restantes ?? 0;
     let historial = [...(usuario.historial_asistencias || [])];
     let userModified = false;
+    let nuevasInasistencias = [];
 
-    for (const clase of clasesDeHoy) {
-      const classHourInt = parseInt(clase.hora.split(':')[0]);
+    // Chequear los últimos 7 días (i=0 es hoy, i=7 hace una semana)
+    for (let i = 0; i <= 7; i++) {
+      const iterDate = new Date(argDate);
+      iterDate.setDate(iterDate.getDate() - i);
       
-      // Si ya pasó 1 HORA desde el comienzo de la clase
-      if (currentHourDecimal >= classHourInt + 1) {
-        const idTurnoUnico = `${fechaIsoString}_${clase.hora}`;
+      const dayIndex = iterDate.getDay();
+      const iterStringLargo = diasMapLargo[dayIndex];
+      const fechaIsoString = `${iterDate.getFullYear()}-${String(iterDate.getMonth()+1).padStart(2,'0')}-${String(iterDate.getDate()).padStart(2,'0')}`;
+      
+      const fijosDelDia = usuario.turnos_fijos?.filter(t => t.dia === iterStringLargo).map(t => ({ hora: t.hora, esExtra: false })) || [];
+      const extrasDelDia = usuario.clases_extra?.filter(e => e.startsWith(fechaIsoString + '_')).map(e => ({ hora: e.split('_')[1], esExtra: true })) || [];
+      
+      const clasesDelDia = [...fijosDelDia, ...extrasDelDia];
+      
+      for (const clase of clasesDelDia) {
+        const classHourInt = parseInt(clase.hora.split(':')[0]);
         
-        // Si es fijo, verificamos si fue cancelado o es feriado. Las extra no se pueden cancelar.
-        if (!clase.esExtra) {
-          if (usuario.clases_canceladas?.includes(idTurnoUnico)) continue;
-          if (usuario.feriados_disfrutados?.includes(fechaIsoString)) continue;
+        let claseYaPaso = false;
+        if (i === 0) {
+          // Si es hoy, verificamos si ya pasó 1 HORA desde el comienzo de la clase
+          if (currentHourDecimal >= classHourInt + 1) {
+            claseYaPaso = true;
+          }
+        } else {
+          // Si es un día anterior, la clase ya pasó definitivamente
+          claseYaPaso = true;
         }
-        
-        // Verificar si ya hay un registro (presente o ausente) para esta clase hoy
-        const yaRegistrado = historial.some(h => h.fecha === fechaIsoString && h.hora === clase.hora);
-        
-        if (!yaRegistrado) {
-          // Si es extra o le quedan clases, marcamos el ausente
-          if (clase.esExtra || clasesRestantes > 0) {
-            historial.push({
-              fecha: fechaIsoString,
-              hora: clase.hora,
-              estado: 'ausente',
-              motivo: 'automatico_lazy_sweep',
-              timestamp: new Date().toISOString()
-            });
-            
-            // Solo restamos clases_restantes si es turno fijo
-            if (!clase.esExtra) {
-              clasesRestantes -= 1;
+
+        if (claseYaPaso) {
+          const idTurnoUnico = `${fechaIsoString}_${clase.hora}`;
+          
+          // Si es fijo, verificamos si fue cancelado o es feriado. Las extra no se pueden cancelar.
+          if (!clase.esExtra) {
+            if (usuario.clases_canceladas?.includes(idTurnoUnico)) continue;
+            if (usuario.feriados_disfrutados?.includes(fechaIsoString)) continue;
+          }
+          
+          // Verificar si ya hay un registro (presente o ausente) para esta clase
+          const yaRegistrado = historial.some(h => h.fecha === fechaIsoString && h.hora === clase.hora);
+          
+          if (!yaRegistrado) {
+            // Si es extra o le quedan clases, marcamos el ausente
+            if (clase.esExtra || clasesRestantes > 0) {
+              historial.push({
+                fecha: fechaIsoString,
+                hora: clase.hora,
+                estado: 'ausente',
+                motivo: 'automatico_lazy_sweep',
+                timestamp: new Date().toISOString()
+              });
+              
+              // Solo restamos clases_restantes si es turno fijo
+              if (!clase.esExtra) {
+                clasesRestantes -= 1;
+              }
+              userModified = true;
+              nuevasInasistencias.push({ fecha: fechaIsoString, dia: iterStringLargo });
             }
-            userModified = true;
           }
         }
       }
@@ -421,16 +437,18 @@ export const ejecutarBarridoInasistencias = async (db, usuariosActivos) => {
         historial_asistencias: historial
       });
       
-      // Crear notificación de inasistencia
-      const notifRef = doc(collection(db, 'notificaciones'));
-      batch.set(notifRef, {
-        usuarioId: usuario.id,
-        tipo: 'inasistencia',
-        titulo: 'Inasistencia Automática',
-        mensaje: `Se ha registrado una inasistencia a tu clase del día ${todayStringLargo}.`,
-        leida: false,
-        fecha: new Date().toISOString()
-      });
+      // Crear notificaciones individuales para cada inasistencia retroactiva o actual detectada
+      for (const inasistencia of nuevasInasistencias) {
+        const notifRef = doc(collection(db, 'notificaciones'));
+        batch.set(notifRef, {
+          usuarioId: usuario.id,
+          tipo: 'inasistencia',
+          titulo: 'Inasistencia Automática',
+          mensaje: `Se ha registrado una inasistencia a tu clase del día ${inasistencia.dia} (${inasistencia.fecha}).`,
+          leida: false,
+          fecha: new Date().toISOString()
+        });
+      }
       
       modificaciones++;
     }
@@ -439,7 +457,7 @@ export const ejecutarBarridoInasistencias = async (db, usuariosActivos) => {
   if (modificaciones > 0) {
     try {
       await batch.commit();
-      console.log(`[Lazy Sweep] Se aplicaron ${modificaciones} inasistencias automáticas.`);
+      console.log(`[Lazy Sweep] Se aplicaron inasistencias a ${modificaciones} usuarios.`);
     } catch (error) {
       console.error("[Lazy Sweep] Error al ejecutar el batch:", error);
     }
