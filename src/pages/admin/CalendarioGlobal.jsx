@@ -127,12 +127,12 @@ export default function CalendarioGlobal() {
 
   const handleDeclararFeriado = async () => {
     if (!feriadoDate) return;
-    if (window.confirm(`¿Estás seguro de declarar el día ${feriadoDate} como Feriado? Se le devolverá la clase y otorgará un crédito a todos los alumnos que tengan turno fijo ese día.`)) {
+    if (window.confirm(`¿Estás seguro de declarar el día ${feriadoDate} como Feriado? Las clases de ese día se suspenderán automáticamente y no se otorgarán créditos.`)) {
       setIsSavingFeriado(true);
       try {
         const res = await declararFeriado(db, feriadoDate);
         if (res.success) {
-          alert('Feriado declarado con éxito. Todos los alumnos afectados han recibido su crédito.');
+          alert('Feriado declarado con éxito. Las clases del día han sido suspendidas.');
           setIsFeriadoModalOpen(false);
         } else {
           alert('Hubo un error: ' + res.error);
@@ -422,7 +422,7 @@ export default function CalendarioGlobal() {
         {feriadoTab === 'declarar' ? (
           <div className="space-y-4">
             <p className="text-sm text-gray-600">
-              Al declarar un feriado, todos los alumnos que tengan un turno fijo ese día recibirán automáticamente <strong>1 crédito extra de feriado (con vigencia de 30 días)</strong> para no perder su clase.
+              Al declarar un feriado, los turnos de los alumnos agendados para ese día se suspenderán automáticamente y <strong>no otorgarán créditos de recuperación</strong>, debido a que los feriados no se recuperan.
             </p>
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">Seleccionar Fecha del Feriado</label>
