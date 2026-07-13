@@ -124,6 +124,7 @@ export const recuperarClase = async (db, uid, idTurnoDestino) => {
  */
 export const intercambiarTurno = async (db, uid, idTurnoDestino, idTurnoOrigen) => {
   const userRef = doc(db, 'usuarios', uid);
+  let userName = "Un alumno";
 
   try {
     await runTransaction(db, async (transaction) => {
@@ -131,6 +132,8 @@ export const intercambiarTurno = async (db, uid, idTurnoDestino, idTurnoOrigen) 
       if (!userDoc.exists()) throw new Error("Usuario no encontrado");
 
       const data = userDoc.data();
+      userName = `${data.nombre || ''} ${data.apellido || ''}`.trim() || "Un alumno";
+      
       const canceladas = data.clases_canceladas || [];
       const extras = data.clases_extra || [];
 
@@ -152,6 +155,20 @@ export const intercambiarTurno = async (db, uid, idTurnoDestino, idTurnoOrigen) 
         clases_restantes: clasesRestantes - 1
       });
     });
+
+    try {
+      const [fO, hO] = idTurnoOrigen.split('_');
+      const [fD, hD] = idTurnoDestino.split('_');
+      const [, mO, dO] = fO.split('-');
+      const [, mD, dD] = fD.split('-');
+
+      const adminMsg = `**${userName}** ha cambiado su horario del día **${dO}/${mO} a las ${hO} hs** por el día **${dD}/${mD} a las ${hD} hs**.`;
+      
+      await crearNotificacion(db, 'admin', 'cambio_turno', 'Cambio de Horario', adminMsg);
+    } catch (notifErr) {
+      console.error("Error al enviar notif a admin:", notifErr);
+    }
+
     return { success: true };
   } catch (error) {
     console.error("Error al intercambiar turno:", error);

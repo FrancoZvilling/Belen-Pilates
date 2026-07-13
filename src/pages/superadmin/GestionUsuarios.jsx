@@ -246,6 +246,11 @@ export default function GestionUsuarios() {
                       <h4 className="font-bold text-gray-800 text-sm mb-1">{notif.titulo}</h4>
                       <p className="text-sm text-gray-600">
                         {(() => {
+                          if (notif.mensaje.includes('**')) {
+                            return notif.mensaje.split('**').map((parte, i) => 
+                              i % 2 === 1 ? <span key={i} className="font-bold text-blue-600">{parte}</span> : parte
+                            );
+                          }
                           const match = notif.mensaje.match(/^(.*?)( se ha registrado| ha avisado)(.*)$/i);
                           if (match) {
                             return (

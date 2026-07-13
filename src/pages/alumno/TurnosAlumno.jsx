@@ -95,9 +95,12 @@ export default function TurnosAlumno() {
     setIsModalOpen(true);
   };
 
-  const handleConfirmarSwap = async (idTurnoDestino) => {
+  const handleConfirmarSwap = async (turnoBolsa) => {
     if (turnoACambiar) {
-      const res = await intercambiarTurno(db, user.uid, idTurnoDestino, turnoACambiar.id);
+      const mensaje = `¿Estás seguro que querés cambiar tu turno del ${turnoACambiar.fecha} a las ${turnoACambiar.hora} hs por el nuevo turno del ${turnoBolsa.fecha} a las ${turnoBolsa.hora} hs?`;
+      if (!window.confirm(mensaje)) return;
+
+      const res = await intercambiarTurno(db, user.uid, turnoBolsa.id, turnoACambiar.id);
       if (res.success) {
         alert("¡Turno cambiado con éxito!");
         setIsModalOpen(false);
@@ -407,7 +410,7 @@ export default function TurnosAlumno() {
                 <div 
                   key={turnoBolsa.id} 
                   className="flex items-center justify-between p-3 border border-gray-100 rounded-xl hover:border-primary-asistencia transition-colors bg-white shadow-sm cursor-pointer"
-                  onClick={() => handleConfirmarSwap(turnoBolsa.id)}
+                  onClick={() => handleConfirmarSwap(turnoBolsa)}
                 >
                   <div>
                     <h4 className="font-bold text-gray-800">{turnoBolsa.fecha}</h4>
