@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { generarAgendaUsuario } from '../../utils/calendarUtils';
 import { db } from '../../config/firebase';
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
 import { marcarNotificacionesLeidas, borrarNotificacion, borrarTodasLasNotificaciones } from '../../services/notificacionesService';
 
 export default function DashboardAlumno() {
@@ -21,7 +21,21 @@ export default function DashboardAlumno() {
   const clasesRestantes = userData?.clases_restantes ?? 0;
   const clasesMaximas = userData?.plan ?? 8;
   
-  const misTurnos = userData ? generarAgendaUsuario(userData, 14) : [];
+  const [feriadosGlobales, setFeriadosGlobales] = useState([]);
+
+  useEffect(() => {
+    const fetchFeriados = async () => {
+      try {
+        const snapFeriados = await getDocs(collection(db, 'feriados'));
+        setFeriadosGlobales(snapFeriados.docs.map(d => d.id));
+      } catch (e) {
+        console.error("Error fetching feriados:", e);
+      }
+    };
+    fetchFeriados();
+  }, []);
+
+  const misTurnos = userData ? generarAgendaUsuario(userData, 14, feriadosGlobales) : [];
 
   const [isNotifPanelOpen, setIsNotifPanelOpen] = useState(false);
   const [notificaciones, setNotificaciones] = useState([]);
@@ -214,8 +228,8 @@ export default function DashboardAlumno() {
                       Ausente
                     </span>
                   ) : turno.estadoEspecial === 'feriado' ? (
-                    <span className="bg-purple-50 text-purple-700 font-bold px-3 py-2 rounded-xl text-[10px] text-center max-w-[100px] flex items-center justify-center border border-purple-200">
-                      Pospuesto por admin
+                    <span className="bg-red-50 text-red-700 font-bold px-3 py-2 rounded-xl text-[10px] text-center max-w-[120px] flex items-center justify-center border border-red-200 leading-tight">
+                      Clase Suspendida por Feriado
                     </span>
                   ) : (
                     <button 
