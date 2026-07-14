@@ -1,62 +1,69 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '../../store/authStore';
 import { db } from '../../config/firebase';
+import { collection, getDocs } from 'firebase/firestore';
 import { registrarInasistenciaAlumno } from '../../services/turnosService';
 import Modal from '../common/Modal';
 import { AlertCircle, Loader2 } from 'lucide-react';
+import { generarAgendaUsuario } from '../../utils/calendarUtils';
 
 export default function ReportAbsenceButton() {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { userData, user } = useAuthStore(state => state);
 
+  const [feriadosGlobales, setFeriadosGlobales] = useState([]);
+
+  useEffect(() => {
+    const fetchFeriados = async () => {
+      try {
+        const snapFeriados = await getDocs(collection(db, 'feriados'));
+        setFeriadosGlobales(snapFeriados.docs.map(d => d.id));
+      } catch (e) {
+        console.error("Error fetching feriados", e);
+      }
+    };
+    fetchFeriados();
+  }, []);
+
   // Calcular la próxima clase a la que se puede avisar inasistencia
   const getProximaClase = () => {
-    if (!userData || !userData.turnos_fijos || userData.turnos_fijos.length === 0) return null;
+    if (!userData) return null;
+
+    // Generar la agenda cronológica real del usuario (incluye fijos y extras)
+    const agenda = generarAgendaUsuario(userData, 14, feriadosGlobales);
+    if (!agenda || agenda.length === 0) return null;
 
     const d = new Date();
     const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
     const argDate = new Date(utc + (3600000 * -3));
+    const currentDecimal = argDate.getHours() + (argDate.getMinutes() / 60);
 
-    const daysMap = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-    const historial = userData.historial_asistencias || [];
+    for (const turno of agenda) {
+      // Ignorar clases canceladas, pasadas/registradas o feriados
+      if (turno.isCancelado || turno.isPresente || turno.isAusente || turno.estadoEspecial === 'feriado') continue;
 
-    // Recorrer los próximos 14 días buscando la primera clase sin registro
-    for (let offset = 0; offset < 14; offset++) {
-      const checkDate = new Date(argDate);
-      checkDate.setDate(checkDate.getDate() + offset);
-      const dayName = daysMap[checkDate.getDay()];
-      const fechaIso = `${checkDate.getFullYear()}-${String(checkDate.getMonth()+1).padStart(2,'0')}-${String(checkDate.getDate()).padStart(2,'0')}`;
-
-      const dateStr = `${String(checkDate.getDate()).padStart(2,'0')}/${String(checkDate.getMonth()+1).padStart(2,'0')}`;
-
-      // Buscar si hay turnos fijos para este día
-      const turnosDelDia = userData.turnos_fijos
-        .filter(t => t.dia === dayName)
-        .sort((a, b) => parseInt(a.hora.split(':')[0]) - parseInt(b.hora.split(':')[0]));
-
-      for (const turno of turnosDelDia) {
-        // Si estamos en el día de hoy, solo considerar clases que aún no empezaron
-        if (offset === 0) {
-          const classHour = parseInt(turno.hora.split(':')[0]);
-          const classMin = parseInt(turno.hora.split(':')[1]) || 0;
-          const classDecimal = classHour + (classMin / 60);
-          const currentDecimal = argDate.getHours() + (argDate.getMinutes() / 60);
-          // Si la clase ya empezó (o ya pasó la ventana), saltearla
-          if (currentDecimal >= classDecimal) continue;
-        }
-
-        // Verificar que no haya un registro previo (presente o ausente) para esta clase
-        const yaRegistrado = historial.some(h => h.fecha === fechaIso && h.hora === turno.hora);
-        if (!yaRegistrado) {
-          return {
-            dia: dayName,
-            hora: turno.hora,
-            fechaIso: fechaIso,
-            fechaDisplay: offset === 0 ? `Hoy ${dateStr}` : offset === 1 ? `Mañana ${dateStr}` : `${dayName} ${dateStr}`
-          };
-        }
+      const [y, m, day] = turno.fechaIsoString.split('-');
+      const checkDate = new Date(y, m - 1, day);
+      const isToday = checkDate.getDate() === argDate.getDate() && checkDate.getMonth() === argDate.getMonth();
+      
+      if (isToday) {
+        const classHour = parseInt(turno.hora.split(':')[0]);
+        const classMin = parseInt(turno.hora.split(':')[1]) || 0;
+        const classDecimal = classHour + (classMin / 60);
+        // Si la clase ya empezó o pasó, saltarla
+        if (currentDecimal >= classDecimal) continue;
       }
+
+      const dateStr = `${day}/${m}`;
+      const prefix = turno.fecha.split(' ')[0]; // "Hoy", "Mañana", o el día de la semana
+
+      return {
+        dia: turno.fechaOriginal || prefix,
+        hora: turno.hora,
+        fechaIso: turno.fechaIsoString,
+        fechaDisplay: (prefix === 'Hoy' || prefix === 'Mañana') ? `${prefix} ${dateStr}` : turno.fecha
+      };
     }
 
     return null;
