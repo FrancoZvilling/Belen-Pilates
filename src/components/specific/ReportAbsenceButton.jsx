@@ -28,6 +28,8 @@ export default function ReportAbsenceButton() {
       const dayName = daysMap[checkDate.getDay()];
       const fechaIso = `${checkDate.getFullYear()}-${String(checkDate.getMonth()+1).padStart(2,'0')}-${String(checkDate.getDate()).padStart(2,'0')}`;
 
+      const dateStr = `${String(checkDate.getDate()).padStart(2,'0')}/${String(checkDate.getMonth()+1).padStart(2,'0')}`;
+
       // Buscar si hay turnos fijos para este día
       const turnosDelDia = userData.turnos_fijos
         .filter(t => t.dia === dayName)
@@ -51,7 +53,7 @@ export default function ReportAbsenceButton() {
             dia: dayName,
             hora: turno.hora,
             fechaIso: fechaIso,
-            fechaDisplay: offset === 0 ? 'Hoy' : offset === 1 ? 'Mañana' : dayName
+            fechaDisplay: offset === 0 ? `Hoy ${dateStr}` : offset === 1 ? `Mañana ${dateStr}` : `${dayName} ${dateStr}`
           };
         }
       }
