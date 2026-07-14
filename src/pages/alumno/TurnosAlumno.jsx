@@ -23,7 +23,21 @@ export default function TurnosAlumno() {
   
   const creditosRecuperacion = normales + feriadosVigentes;
 
-  const misTurnos = userData ? generarAgendaUsuario(userData, 14) : [];
+  const [feriadosGlobales, setFeriadosGlobales] = useState([]);
+
+  useEffect(() => {
+    const fetchFeriados = async () => {
+      try {
+        const snapFeriados = await getDocs(collection(db, 'feriados'));
+        setFeriadosGlobales(snapFeriados.docs.map(d => d.id));
+      } catch (e) {
+        console.error("Error fetching feriados:", e);
+      }
+    };
+    fetchFeriados();
+  }, []);
+
+  const misTurnos = userData ? generarAgendaUsuario(userData, 14, feriadosGlobales) : [];
 
   const [activeTab, setActiveTab] = useState('proximos');
   const [turnoACambiar, setTurnoACambiar] = useState(null);
@@ -77,7 +91,7 @@ export default function TurnosAlumno() {
           const preRegs = snapPre.docs.map(d => ({id: d.id, ...d.data()}));
           
           const todosActivos = [...users, ...preRegs];
-          setBolsaTurnos(generarBolsaDeTurnos(todosActivos, 7, user.uid));
+          setBolsaTurnos(generarBolsaDeTurnos(todosActivos, 7, user.uid, feriadosGlobales));
         } catch (error) {
           console.error("Error calculando bolsa:", error);
         } finally {

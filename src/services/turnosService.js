@@ -373,6 +373,14 @@ export const ejecutarBarridoInasistencias = async (db, usuariosActivos) => {
   const currentHourDecimal = argDate.getHours() + (argDate.getMinutes() / 60);
   const diasMapLargo = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
+  let feriadosGlobales = [];
+  try {
+    const snapFeriados = await getDocs(collection(db, 'feriados'));
+    feriadosGlobales = snapFeriados.docs.map(doc => doc.id);
+  } catch (e) {
+    console.error("Error al buscar feriados en el barrido", e);
+  }
+
   const batch = writeBatch(db);
   let modificaciones = 0;
 
@@ -419,6 +427,9 @@ export const ejecutarBarridoInasistencias = async (db, usuariosActivos) => {
           if (!clase.esExtra) {
             if (usuario.clases_canceladas?.includes(idTurnoUnico)) continue;
             if (usuario.feriados_disfrutados?.includes(fechaIsoString)) continue;
+          } else {
+            // Si es extra, perdonamos la inasistencia si el día fue declarado feriado globalmente
+            if (feriadosGlobales.includes(fechaIsoString)) continue;
           }
           
           // Verificar si ya hay un registro (presente o ausente) para esta clase
@@ -622,8 +633,13 @@ export const declararFeriado = async (db, fecha) => {
       
       // Si el alumno tiene turno fijo el día del feriado
       const tieneTurnoFijo = turnosFijos.some(t => t.dia === diaSemana);
+      const clasesExtra = data.clases_extra || [];
+      const tieneClaseExtra = clasesExtra.some(extra => extra.startsWith(fecha));
       
+      let afectado = false;
+
       if (tieneTurnoFijo) {
+        afectado = true;
         const feriadosDisfrutados = data.feriados_disfrutados || [];
         const clasesRestantes = data.clases_restantes || 0;
         
@@ -631,7 +647,11 @@ export const declararFeriado = async (db, fecha) => {
           feriados_disfrutados: [...feriadosDisfrutados, fecha],
           clases_restantes: Math.max(0, clasesRestantes - 1) // Pierde la clase
         });
+      } else if (tieneClaseExtra) {
+        afectado = true;
+      }
 
+      if (afectado) {
         // Crear notificación de feriado
         const notifRef = doc(collection(db, 'notificaciones'));
         const [y, m, d] = fecha.split('-');
@@ -683,19 +703,32 @@ export const borrarFeriado = async (db, fecha) => {
     querySnapshot.forEach((userDoc) => {
       const data = userDoc.data();
       const feriadosDisfrutados = data.feriados_disfrutados || [];
+      const clasesExtra = data.clases_extra || [];
       
+      const esFijoAfectado = feriadosDisfrutados.includes(fecha);
+      const esExtraAfectado = clasesExtra.some(extra => extra.startsWith(fecha));
+
+      let afectado = false;
+      let mensajeNotif = "";
+
       // Si a este alumno se le aplicó el feriado
-      if (feriadosDisfrutados.includes(fecha)) {
+      if (esFijoAfectado) {
+        afectado = true;
         let clasesRestantes = data.clases_restantes || 0;
         let updateData = {
           feriados_disfrutados: feriadosDisfrutados.filter(f => f !== fecha),
           clases_restantes: clasesRestantes + 1
         };
 
-        let mensajeNotif = `El feriado del ${day}/${month}/${year} ha sido cancelado y tu calendario ha vuelto a la normalidad. Se ha restaurado tu clase del abono.`;
+        mensajeNotif = `El feriado del ${day}/${month}/${year} ha sido cancelado y tu calendario ha vuelto a la normalidad. Se ha restaurado tu clase del abono.`;
         
         batch.update(userDoc.ref, updateData);
+      } else if (esExtraAfectado) {
+        afectado = true;
+        mensajeNotif = `El feriado del ${day}/${month}/${year} ha sido cancelado y tu calendario ha vuelto a la normalidad. Tu clase extra/recupero vuelve a estar vigente.`;
+      }
 
+      if (afectado) {
         // Crear notificación de reversión
         const notifRef = doc(collection(db, 'notificaciones'));
         batch.set(notifRef, {

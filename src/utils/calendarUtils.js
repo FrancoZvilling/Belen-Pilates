@@ -1,4 +1,4 @@
-export const generarBolsaDeTurnos = (usuariosActivos, diasHaciaFuturo = 14, currentUserUid = null) => {
+export const generarBolsaDeTurnos = (usuariosActivos, diasHaciaFuturo = 14, currentUserUid = null, feriadosActivos = []) => {
   const d = new Date();
   const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
   const argDate = new Date(utc + (3600000 * -3)); // UTC-3 (Argentina)
@@ -33,6 +33,8 @@ export const generarBolsaDeTurnos = (usuariosActivos, diasHaciaFuturo = 14, curr
     if (!horasDisponibles) continue;
 
     const fechaIsoString = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
+
+    if (feriadosActivos.includes(fechaIsoString)) continue;
 
     // Para cada hora del día
     horasDisponibles.forEach(hora => {
@@ -104,7 +106,7 @@ export const generarBolsaDeTurnos = (usuariosActivos, diasHaciaFuturo = 14, curr
  * @param {number} diasHaciaFuturo - Días a proyectar (por defecto 14)
  * @returns {Array} - Array de objetos turno listos para UI
  */
-export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14) => {
+export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14, feriadosActivos = []) => {
   if (!userData || userData.estado === 'inactivo') return [];
 
   const d = new Date();
@@ -139,8 +141,8 @@ export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14) => {
         return;
       }
 
-      // Si el día fue feriado
-      if (userData.feriados_disfrutados?.includes(fechaIsoString)) {
+      // Si el día fue feriado (ya sea guardado históricamente o en la lista activa global)
+      if (userData.feriados_disfrutados?.includes(fechaIsoString) || feriadosActivos.includes(fechaIsoString)) {
         agenda.push({
           id: idTurnoUnico,
           fechaOriginal: fijo.dia,
@@ -184,6 +186,25 @@ export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14) => {
         
         // Chequear historial
         const registroHistorial = userData.historial_asistencias?.find(h => h.fecha === fechaIsoString && h.hora === horaExtra);
+
+        // Si el día es feriado, la marcamos como suspendida
+        if (feriadosActivos.includes(fechaIsoString)) {
+          agenda.push({
+            id: extra,
+            fechaOriginal: diaSemanaNombre,
+            fechaIsoString: fechaIsoString,
+            fecha: etiquetaDia,
+            fechaPura: checkDate,
+            hora: horaExtra,
+            tipo: 'Recupero / Extra',
+            isPresente: false,
+            isAusente: false,
+            estadoEspecial: 'feriado',
+            isCancelado: true,
+            esIntercambiable: false 
+          });
+          return; // skip pushing the normal class below
+        }
 
         agenda.push({
           id: extra,
