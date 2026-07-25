@@ -6,23 +6,11 @@ import { Calendar, History, CheckCircle, Info, RefreshCw, AlertCircle, ChevronDo
 import { db } from '../../config/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import { generarBolsaDeTurnos, generarAgendaUsuario } from '../../utils/calendarUtils';
-import { intercambiarTurno, cancelarClaseAnticipada, recuperarClase } from '../../services/turnosService';
+import { intercambiarTurno, cancelarClaseAnticipada } from '../../services/turnosService';
 
 export default function TurnosAlumno() {
   const { userData, user } = useAuthStore(state => state);
   
-  // Filtrar créditos de feriado que no estén vencidos
-  const hoy = new Date();
-  const utc = hoy.getTime() + (hoy.getTimezoneOffset() * 60000);
-  const argDate = new Date(utc + (3600000 * -3));
-  const hoyStr = `${argDate.getFullYear()}-${String(argDate.getMonth()+1).padStart(2,'0')}-${String(argDate.getDate()).padStart(2,'0')}`;
-  
-  const feriadosActivos = userData?.creditos_feriados_activos || [];
-  const feriadosVigentes = feriadosActivos.filter(vto => vto >= hoyStr).length;
-  const normales = userData?.creditos_recuperacion || 0;
-  
-  const creditosRecuperacion = normales + feriadosVigentes;
-
   const [feriadosGlobales, setFeriadosGlobales] = useState([]);
 
   useEffect(() => {
@@ -37,12 +25,12 @@ export default function TurnosAlumno() {
     fetchFeriados();
   }, []);
 
-  const misTurnos = userData ? generarAgendaUsuario(userData, 14, feriadosGlobales) : [];
+  const misTurnosBrutos = userData ? generarAgendaUsuario(userData, 14, feriadosGlobales) : [];
+  const misTurnos = misTurnosBrutos.filter(t => !(t.estadoEspecial === 'ausente_pago' && t.tipo === 'Fijo'));
 
   const [activeTab, setActiveTab] = useState('proximos');
   const [turnoACambiar, setTurnoACambiar] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isBolsaLibreOpen, setIsBolsaLibreOpen] = useState(false);
   
   const [bolsaTurnos, setBolsaTurnos] = useState([]);
   const [isLoadingBolsa, setIsLoadingBolsa] = useState(false);
@@ -78,7 +66,7 @@ export default function TurnosAlumno() {
 
   // Cargar Bolsa solo cuando se abre un modal
   useEffect(() => {
-    if (isModalOpen || isBolsaLibreOpen) {
+    if (isModalOpen) {
       const cargarBolsa = async () => {
         setIsLoadingBolsa(true);
         try {
@@ -100,7 +88,7 @@ export default function TurnosAlumno() {
       };
       cargarBolsa();
     }
-  }, [isModalOpen, isBolsaLibreOpen]);
+  }, [isModalOpen]);
 
   const handleCambiarClick = (turno) => {
     if (turno.isCancelado) return alert("Este turno ya fue cancelado.");
@@ -125,31 +113,15 @@ export default function TurnosAlumno() {
     }
   };
 
-  const handleRecuperar = async (idTurnoDestino) => {
-    const res = await recuperarClase(db, user.uid, idTurnoDestino);
-    if (res.success) {
-      alert("¡Te has anotado exitosamente en este turno de recuperación!");
-      setIsBolsaLibreOpen(false);
-    } else {
-      alert("Error al usar crédito: " + res.error);
-    }
-  };
-
   const handleCancelarClick = async (turno) => {
     if (turno.isCancelado) return alert("Ya cancelaste este turno.");
-    const creditosUsados = userData?.creditos_usados_este_mes || 0;
-    const mensajeConfirm = creditosUsados < 2 
-      ? `¿Estás seguro de cancelar tu turno del ${turno.fecha}? Se te otorgará 1 crédito de recuperación.`
-      : `¿Estás seguro de cancelar tu turno del ${turno.fecha}? IMPORTANTE: Ya usaste tus 2 créditos mensuales, por lo que NO se te otorgará crédito por esta inasistencia.`;
+    
+    const mensajeConfirm = `¿Estás seguro de cancelar tu turno del ${turno.fecha}? Recordá que ya no utilizamos sistema de créditos, por lo que este turno se perderá.`;
 
     if (window.confirm(mensajeConfirm)) {
       const res = await cancelarClaseAnticipada(db, user.uid, turno.id);
       if (res.success) {
-        if (res.otorgarCredito) {
-          alert("Turno cancelado exitosamente. Se te otorgó 1 crédito de recuperación.");
-        } else {
-          alert("Se marcó la inasistencia pero ya superaste el límite de 2 créditos mensuales para recuperar.");
-        }
+        alert("Turno cancelado exitosamente.");
       } else {
         alert("Error al cancelar: " + res.error);
       }
@@ -203,35 +175,11 @@ export default function TurnosAlumno() {
         {activeTab === 'proximos' && (
           <div className="space-y-6">
             
-            {/* Banner de Créditos */}
-            {creditosRecuperacion > 0 && (
-              <div className="bg-blue-50 border border-blue-200 p-5 rounded-2xl flex flex-col shadow-sm">
-                <div className="flex items-start mb-3">
-                  <Info className="text-blue-500 mr-3 shrink-0 mt-0.5" size={24} />
-                  <div>
-                    <h4 className="text-blue-800 font-black">¡Tenés {creditosRecuperacion} crédito(s)!</h4>
-                    <p className="text-blue-600 text-sm mt-1">Usalos para anotarte en cualquier clase libre de la semana.</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setIsBolsaLibreOpen(true)}
-                  className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl shadow-sm active:scale-95 transition-transform flex justify-center items-center"
-                >
-                  <RefreshCw size={18} className="mr-2" />
-                  Abrir Bolsa de Turnos
-                </button>
-              </div>
-            )}
+
 
             {/* Lista de Turnos */}
             <div>
-              {userData?.clases_restantes <= 0 ? (
-                <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center shadow-sm">
-                  <AlertCircle className="mx-auto text-red-400 mb-3" size={32} />
-                  <p className="font-bold text-red-800">No tenés clases disponibles</p>
-                  <p className="text-sm text-red-700 mt-1">Aboná tu mensualidad para volver a gestionar tus turnos.</p>
-                </div>
-              ) : misTurnos.length === 0 ? (
+              {misTurnos.length === 0 ? (
                 <div className="text-center py-10 bg-white rounded-2xl shadow-sm border border-gray-100">
                   <CheckCircle className="mx-auto text-gray-300 mb-2" size={40} />
                   <p className="text-gray-500 font-medium">No tenés turnos programados.</p>
@@ -313,32 +261,6 @@ export default function TurnosAlumno() {
         {/* TAB: INASISTENCIAS */}
         {activeTab === 'inasistencias' && (
           <div className="space-y-6">
-            {/* Tarjeta Resumen de Créditos */}
-            <div className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 p-6 rounded-3xl flex flex-col items-center text-center shadow-sm">
-              <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4">
-                <span className="text-3xl font-black text-orange-500">{creditosRecuperacion}</span>
-              </div>
-              <h3 className="text-xl font-black text-orange-800 mb-2">Clases para Recuperar</h3>
-              <p className="text-orange-700 text-sm font-medium mb-2">
-                Tenés {creditosRecuperacion} inasistencia{creditosRecuperacion !== 1 && 's'} a favor para canjear por clases en otros horarios.
-              </p>
-              <p className="text-orange-600/80 text-xs font-bold uppercase tracking-wider mb-6">
-                Recuerda: Máximo 2 créditos por mes
-              </p>
-              
-              <button 
-                onClick={() => setIsBolsaLibreOpen(true)}
-                disabled={creditosRecuperacion === 0}
-                className={`w-full py-4 rounded-xl font-black text-lg transition-transform ${
-                  creditosRecuperacion > 0 
-                    ? 'bg-orange-500 text-white shadow-md active:scale-95' 
-                    : 'bg-white text-orange-300 opacity-60 cursor-not-allowed'
-                }`}
-              >
-                Canjear Inasistencia
-              </button>
-            </div>
-
             {/* Lista de Inasistencias Pasadas */}
             <div>
               <h4 className="font-bold text-gray-800 mb-4 px-2">Registro de Ausencias</h4>
@@ -443,49 +365,6 @@ export default function TurnosAlumno() {
               <Calendar className="mx-auto text-gray-300 mb-2" size={24} />
               <p className="font-bold text-gray-600 text-sm">No hay turnos disponibles</p>
               <p className="text-xs text-gray-400 mt-1">Nadie ha cancelado turnos recientemente. Vuelve a intentar más tarde.</p>
-            </div>
-          )}
-        </div>
-      </Modal>
-
-      {/* MODAL: ANOTARSE LIBRE (CRÉDITO) */}
-      <Modal 
-        isOpen={isBolsaLibreOpen} 
-        onClose={() => setIsBolsaLibreOpen(false)} 
-        title="Bolsa de Turnos"
-      >
-        <p className="text-sm text-gray-600 mb-4">
-          Selecciona una clase libre para utilizar tu crédito de recuperación:
-        </p>
-        
-        <div className="space-y-3">
-          {isLoadingBolsa ? (
-            <div className="text-center py-6">
-              <div className="w-8 h-8 border-4 border-gray-200 border-t-primary-asistencia rounded-full animate-spin mx-auto mb-2"></div>
-              <p className="text-gray-500 font-medium">Buscando turnos disponibles...</p>
-            </div>
-          ) : bolsaTurnos.filter(b => b.ocupacion < b.capacidad).length > 0 ? (
-            bolsaTurnos.filter(b => b.ocupacion < b.capacidad).map((turnoBolsa) => {
-              const lugaresLibres = turnoBolsa.capacidad - turnoBolsa.ocupacion;
-              return (
-                <div 
-                  key={turnoBolsa.id} 
-                  className="flex items-center justify-between p-4 border border-gray-100 rounded-xl hover:border-blue-500 transition-colors bg-white shadow-sm cursor-pointer"
-                  onClick={() => handleRecuperar(turnoBolsa.id)}
-                >
-                  <div>
-                    <h4 className="font-bold text-gray-800">{turnoBolsa.fecha}</h4>
-                    <p className="text-sm text-gray-500">{turnoBolsa.hora} hs</p>
-                  </div>
-                  <span className="text-xs font-black text-blue-600 uppercase tracking-wider">Anotarme</span>
-                </div>
-              );
-            })
-          ) : (
-            <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-6 text-center">
-              <Calendar className="mx-auto text-gray-300 mb-2" size={24} />
-              <p className="font-bold text-gray-600 text-sm">Bolsa vacía</p>
-              <p className="text-xs text-gray-400 mt-1">Actualmente no hay lugares libres para recuperar. Se paciente y vuelve a revisar.</p>
             </div>
           )}
         </div>

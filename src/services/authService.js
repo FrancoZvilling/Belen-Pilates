@@ -55,7 +55,7 @@ export const loginWithGoogle = async () => {
       // Solo los alumnos tienen plan, clases y turnos
       if (rolAsignado === 'alumno') {
         userDocData.plan = preData.plan || 8;
-        userDocData.clases_restantes = preData.plan || 8;
+        userDocData.clases_restantes = 0;
         userDocData.turnos_fijos = preData.turnosFijos || [];
       }
 
@@ -141,7 +141,7 @@ export const loginWithEmail = async (email, password, rememberMe) => {
 
         if (rolAsignado === 'alumno') {
           userDocData.plan = preData.plan || 8;
-          userDocData.clases_restantes = preData.plan || 8;
+          userDocData.clases_restantes = 0;
           userDocData.turnos_fijos = preData.turnos_fijos || preData.turnosFijos || [];
         }
 
@@ -221,7 +221,7 @@ export const registerWithEmail = async (email, password, nombre) => {
 
     if (rolAsignado === 'alumno') {
       userDocData.plan = preData.plan || 8;
-      userDocData.clases_restantes = preData.plan || 8;
+      userDocData.clases_restantes = 0;
       userDocData.turnos_fijos = preData.turnos_fijos || preData.turnosFijos || [];
     }
 

@@ -45,7 +45,7 @@ export default function TurnoCard({ turno, onCambiar, onCancelar }) {
       ) : turno.isCancelado ? (
         <div className="mt-4 flex items-center justify-center py-2.5 bg-gray-100 text-gray-500 font-bold rounded-lg text-sm border border-gray-200">
           <XCircle size={16} className="mr-2" />
-          Cancelado (Crédito Otorgado)
+          Cancelado
         </div>
       ) : turno.isPresente ? (
         <div className="mt-4 flex items-center justify-center py-2.5 bg-green-50 text-green-700 font-bold rounded-lg text-sm border border-green-100">

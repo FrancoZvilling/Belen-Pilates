@@ -109,6 +109,19 @@ export const generarBolsaDeTurnos = (usuariosActivos, diasHaciaFuturo = 14, curr
 export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14, feriadosActivos = []) => {
   if (!userData || userData.estado === 'inactivo') return [];
 
+  let isVencido = false;
+  if (userData.vencimiento_pago) {
+    const d = new Date();
+    const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+    const todayDate = new Date(utc + (3600000 * -3));
+    todayDate.setHours(0, 0, 0, 0);
+
+    const venc = new Date(userData.vencimiento_pago + 'T12:00:00Z');
+    isVencido = venc.getTime() < todayDate.getTime();
+  } else {
+    isVencido = true;
+  }
+
   const d = new Date();
   const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
   const argDate = new Date(utc + (3600000 * -3)); // UTC-3 (Argentina)
@@ -173,7 +186,7 @@ export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14, feriadosAct
         tipo: 'Fijo',
         isPresente: registroHistorial?.estado === 'presente',
         isAusente: registroHistorial?.estado === 'ausente',
-        estadoEspecial: userData.clases_restantes <= 0 ? 'ausente_pago' : null,
+        estadoEspecial: isVencido ? 'ausente_pago' : null,
         isCancelado: false, // Ya no se muestra cancelado, simplemente desaparece o es normal
         esIntercambiable: true // Los turnos fijos se pueden cambiar
       });

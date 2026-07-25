@@ -80,7 +80,7 @@ export default function ReportAbsenceButton() {
 
     if (res.success) {
       setIsConfirmOpen(false);
-      alert("¡Inasistencia registrada! Se te sumó 1 crédito de recuperación.");
+      alert("¡Inasistencia registrada correctamente!");
     } else {
       alert(res.error || "Hubo un error al registrar la inasistencia.");
     }
@@ -113,10 +113,7 @@ export default function ReportAbsenceButton() {
           <p className="text-gray-600 text-sm mb-1">
             Clase del <span className="font-bold">{proximaClase.fechaDisplay}</span> a las <span className="font-bold">{proximaClase.hora} hs</span>
           </p>
-          <p className="text-gray-400 text-xs mb-6">
-            Se te sumará 1 crédito de recuperación para canjear en otro horario.
-          </p>
-          
+
           <div className="space-y-3">
             <button
               onClick={handleConfirmar}

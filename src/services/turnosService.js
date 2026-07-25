@@ -2,7 +2,7 @@ import { doc, runTransaction, writeBatch, collection, getDoc, setDoc, query, whe
 import { crearNotificacion } from './notificacionesService';
 
 /**
- * Cancela una clase con anticipación y otorga 1 crédito.
+ * Cancela una clase con anticipación.
  * @param {Object} db - Firestore
  * @param {string} uid - ID del alumno
  * @param {string} idTurno - ID de la clase en formato "YYYY-MM-DD_HH:MM"
@@ -15,8 +15,6 @@ export const cancelarClaseAnticipada = async (db, uid, idTurno) => {
       if (!userDoc.exists()) throw new Error("Usuario no encontrado");
 
       const data = userDoc.data();
-      const creditos = data.creditos_recuperacion || 0;
-      const creditosUsados = data.creditos_usados_este_mes || 0;
       const clasesRestantes = data.clases_restantes ?? 0;
       const canceladas = data.clases_canceladas || [];
       const esExtra = data.clases_extra?.includes(idTurno);
@@ -29,16 +27,7 @@ export const cancelarClaseAnticipada = async (db, uid, idTurno) => {
         throw new Error("Ya cancelaste esta clase.");
       }
 
-      let otorgarCredito = false;
-      let nuevosCreditosUsados = creditosUsados;
-      if (creditosUsados < 2) {
-        otorgarCredito = true;
-        nuevosCreditosUsados += 1;
-      }
-
       const updateData = {
-        creditos_recuperacion: creditos + (otorgarCredito ? 1 : 0),
-        creditos_usados_este_mes: nuevosCreditosUsados,
         clases_canceladas: [...canceladas, idTurno]
       };
 
@@ -47,73 +36,16 @@ export const cancelarClaseAnticipada = async (db, uid, idTurno) => {
       }
 
       transaction.update(userRef, updateData);
-      return otorgarCredito;
+      return true;
     });
-    return { success: true, otorgarCredito: result };
+    return { success: true };
   } catch (error) {
     console.error("Error al cancelar anticipadamente:", error);
     return { success: false, error: error.message };
   }
 };
 
-/**
- * Recupera una clase usando un crédito disponible.
- * @param {Object} db - Firestore
- * @param {string} uid - ID del alumno
- * @param {string} idTurnoDestino - ID de la clase elegida "YYYY-MM-DD_HH:MM"
- */
-export const recuperarClase = async (db, uid, idTurnoDestino) => {
-  const userRef = doc(db, 'usuarios', uid);
-  try {
-    await runTransaction(db, async (transaction) => {
-      const userDoc = await transaction.get(userRef);
-      if (!userDoc.exists()) throw new Error("Usuario no encontrado");
 
-      const data = userDoc.data();
-      const creditosNormales = data.creditos_recuperacion || 0;
-      const creditosFeriados = data.creditos_feriados_activos || [];
-      const extras = data.clases_extra || [];
-
-      // Filtrar créditos de feriado que no estén vencidos
-      const hoy = new Date();
-      // UTC-3 para comparar igual
-      const utc = hoy.getTime() + (hoy.getTimezoneOffset() * 60000);
-      const argDate = new Date(utc + (3600000 * -3));
-      const hoyStr = `${argDate.getFullYear()}-${String(argDate.getMonth()+1).padStart(2,'0')}-${String(argDate.getDate()).padStart(2,'0')}`;
-      
-      const feriadosVigentes = creditosFeriados.filter(vto => vto >= hoyStr);
-      const tieneFeriado = feriadosVigentes.length > 0;
-
-      if (creditosNormales <= 0 && !tieneFeriado) {
-        throw new Error("No tienes créditos disponibles para canjear.");
-      }
-      if (extras.includes(idTurnoDestino)) {
-        throw new Error("Ya estás anotado en esta clase.");
-      }
-
-      let nuevosNormales = creditosNormales;
-      let nuevosFeriados = [...feriadosVigentes];
-
-      if (tieneFeriado) {
-        // Consume el crédito de feriado que vence más pronto
-        nuevosFeriados.sort();
-        nuevosFeriados.shift();
-      } else {
-        nuevosNormales -= 1;
-      }
-
-      transaction.update(userRef, {
-        creditos_recuperacion: nuevosNormales,
-        creditos_feriados_activos: nuevosFeriados,
-        clases_extra: [...extras, idTurnoDestino]
-      });
-    });
-    return { success: true };
-  } catch (error) {
-    console.error("Error al recuperar clase:", error);
-    return { success: false, error: error.message };
-  }
-};
 
 /**
  * Intercambia un turno sin modificar los créditos (Cancela el viejo y toma el nuevo a la vez).
@@ -273,8 +205,6 @@ export const registrarInasistenciaAlumno = async (db, uid, fechaIsoString, horaT
       if (!userDoc.exists()) throw new Error("Usuario no encontrado");
 
       const data = userDoc.data();
-      const creditos = data.creditos_recuperacion ?? 0;
-      const creditosUsados = data.creditos_usados_este_mes || 0;
       const clasesRestantes = data.clases_restantes ?? 0;
       const esExtra = data.clases_extra?.includes(`${fechaIsoString}_${horaTurno}`);
 
@@ -297,16 +227,7 @@ export const registrarInasistenciaAlumno = async (db, uid, fechaIsoString, horaT
         timestamp: new Date().toISOString()
       };
 
-      let otorgarCredito = false;
-      let nuevosCreditosUsados = creditosUsados;
-      if (creditosUsados < 2) {
-        otorgarCredito = true;
-        nuevosCreditosUsados += 1;
-      }
-
       const updateData = {
-        creditos_recuperacion: creditos + (otorgarCredito ? 1 : 0),
-        creditos_usados_este_mes: nuevosCreditosUsados,
         historial_asistencias: [...historial, nuevoRegistro]
       };
 
@@ -345,11 +266,9 @@ export const cancelarConAnticipacion = async (db, uid, idSesion) => {
         alumnos_anotados: anotados.filter(id => id !== uid) 
       });
 
-      // Sumar crédito y remover de próximos turnos
-      const creditos = userDoc.data().creditos_recuperacion || 0;
+      // Remover de próximos turnos
       const proximos = userDoc.data().proximos_turnos || [];
       transaction.update(userRef, { 
-        creditos_recuperacion: creditos + 1,
         proximos_turnos: proximos.filter(id => id !== idSesion)
       });
     });
@@ -532,13 +451,20 @@ export const registrarPagoAlumno = async (db, uid, monto, nombreAdmin = "Admin")
       // Al pagar se reinician las clases restantes. Asumimos 8 o 12 según su plan
       const clasesNuevas = data.plan || 8; 
 
+      // Filtrar clases canceladas y extra para mantener solo las futuras o de hoy
+      const hoy = new Date();
+      const utcHoy = hoy.getTime() + (hoy.getTimezoneOffset() * 60000);
+      const argHoy = new Date(utcHoy + (3600000 * -3));
+      const hoyStr = `${argHoy.getFullYear()}-${String(argHoy.getMonth() + 1).padStart(2, '0')}-${String(argHoy.getDate()).padStart(2, '0')}`;
+
+      const clasesCanceladasFuturas = (data.clases_canceladas || []).filter(c => c >= hoyStr);
+      const clasesExtraFuturas = (data.clases_extra || []).filter(c => c >= hoyStr);
+
       transaction.update(userRef, {
         vencimiento_pago: mesAbonadoStr,
         clases_restantes: clasesNuevas,
-        creditos_recuperacion: 0,
-        creditos_usados_este_mes: 0,
-        clases_canceladas: [],
-        clases_extra: []
+        clases_canceladas: clasesCanceladasFuturas,
+        clases_extra: clasesExtraFuturas
       });
 
       // 2. Registrar el historial financiero
