@@ -97,8 +97,25 @@ export default function AltaAlumno() {
 
     try {
       setIsSaving(true);
-      // Guardar ticket en "pre_registros" usando el email como ID (en minúsculas)
       const emailId = formData.email.trim().toLowerCase();
+      
+      // Validar si el email ya existe en el sistema
+      const todosLosUsuarios = [
+        ...usuarios,
+        ...(useAdminStore.getState().usuariosInactivos || []),
+        ...preRegistros,
+        ...(useAdminStore.getState().preRegistrosInactivos || [])
+      ];
+      
+      const emailYaRegistrado = todosLosUsuarios.some(u => u.email === emailId || u.id === emailId);
+      
+      if (emailYaRegistrado) {
+        alert("Error: Este email ya está registrado para otro alumno o profesor. Por favor usa un email diferente.");
+        setIsSaving(false);
+        return;
+      }
+
+      // Guardar ticket en "pre_registros" usando el email como ID (en minúsculas)
       const preRegistroRef = doc(db, 'pre_registros', emailId);
       
       await setDoc(preRegistroRef, {

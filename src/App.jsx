@@ -18,6 +18,7 @@ import PWAInstallPrompt from './components/layout/PWAInstallPrompt';
 import AsistenciasDiarias from './pages/admin/AsistenciasDiarias';
 import CalendarioGlobal from './pages/admin/CalendarioGlobal';
 import AltaAlumno from './pages/admin/AltaAlumno';
+import ListaAlumnos from './pages/admin/ListaAlumnos';
 
 // Super Admin Pages
 import PanelPagos from './pages/superadmin/PanelPagos';
@@ -102,6 +103,11 @@ function App() {
           <Route path="/admin/alta-alumno" element={
             <ProtectedRoute allowedRoles={['admin', 'superadmin']}>
               <AltaAlumno />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/alumnos" element={
+            <ProtectedRoute allowedRoles={['admin', 'superadmin']}>
+              <ListaAlumnos />
             </ProtectedRoute>
           } />
 

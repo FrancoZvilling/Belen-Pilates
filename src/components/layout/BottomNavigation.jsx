@@ -35,6 +35,7 @@ export default function BottomNavigation() {
       { to: '/admin/alta-alumno', icon: UserPlus, label: 'Alta', activeColor: 'text-primary-turnos' },
       { to: '/admin/asistencias', icon: CheckCircle, label: 'Camillas', activeColor: 'text-primary-turnos' },
       { to: '/admin/calendario', icon: Calendar, label: 'Calendario', activeColor: 'text-primary-turnos' },
+      { to: '/admin/alumnos', icon: Users, label: 'Alumnos', activeColor: 'text-primary-turnos' },
     ];
   } else if (role === 'superadmin') {
     navItems = [

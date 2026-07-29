@@ -67,7 +67,7 @@ export default function GestionUsuarios() {
     if (filtroRol === 'staff') matchesRole = ['admin', 'superadmin'].includes(u.rol);
 
     return matchesSearch && matchesRole;
-  });
+  }).sort((a, b) => a.nombre.localeCompare(b.nombre));
 
   const totales = {
     alumnos: usuarios.filter(u => u.rol === 'alumno').length + preRegistros.filter(p => !p.rol || p.rol === 'alumno').length,
@@ -77,6 +77,18 @@ export default function GestionUsuarios() {
 
   const getIniciales = (nombre) => {
     return nombre.substring(0, 2).toUpperCase();
+  };
+
+  const isUsuarioNuevo = (usuario) => {
+    if (usuario.isPreRegistro) return true;
+    if (usuario.fecha_registro) {
+      const fechaRegistro = new Date(usuario.fecha_registro);
+      const hoy = new Date();
+      const diffTime = Math.abs(hoy - fechaRegistro);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays <= 7;
+    }
+    return false;
   };
 
   const handleArchivar = async (usuario) => {
@@ -293,10 +305,14 @@ export default function GestionUsuarios() {
                     {isStaff ? <ShieldAlert size={20} /> : getIniciales(usuario.nombre)}
                   </div>
                   
-                  {/* Info */}
                   <div>
-                    <h3 className={`font-bold text-lg ${isInactive ? 'text-gray-400' : 'text-gray-800'}`}>
-                      {usuario.nombre}
+                    <h3 className={`font-bold text-lg flex items-center gap-2 ${isInactive ? 'text-gray-400' : 'text-gray-800'}`}>
+                      {usuario.nombre} {usuario.apellido || ''}
+                      {isUsuarioNuevo(usuario) && (
+                        <span className="bg-amber-100 text-amber-700 text-[10px] uppercase tracking-wider font-black px-2 py-0.5 rounded-md">
+                          NUEVO
+                        </span>
+                      )}
                     </h3>
                     <div className="flex items-center mt-1 space-x-2">
                       {isStaff ? (
