@@ -254,6 +254,13 @@ export default function Login() {
         </p>
       </div>
 
+      {/* Developer Footer */}
+      <div className="text-center mt-10 mb-4">
+        <p className="text-sm text-gray-400 font-medium">
+          hecho por <a href="https://wa.me/5493541315119" target="_blank" rel="noopener noreferrer" className="font-bold text-rose-400 hover:text-pink-500 transition-colors">Franco Zvilling</a>
+        </p>
+      </div>
+
       {/* Password Reset Modal */}
       {showResetModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900 bg-opacity-50 backdrop-blur-sm">
