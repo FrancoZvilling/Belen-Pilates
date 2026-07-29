@@ -19,9 +19,7 @@ export const cancelarClaseAnticipada = async (db, uid, idTurno) => {
       const canceladas = data.clases_canceladas || [];
       const esExtra = data.clases_extra?.includes(idTurno);
 
-      if (!esExtra && clasesRestantes <= 0) {
-        throw new Error("No tienes clases restantes para descontar.");
-      }
+
 
       if (canceladas.includes(idTurno)) {
         throw new Error("Ya cancelaste esta clase.");
@@ -77,9 +75,7 @@ export const intercambiarTurno = async (db, uid, idTurnoDestino, idTurnoOrigen) 
       if (extras.includes(idTurnoDestino)) {
         throw new Error("Ya estás anotado en el turno de destino.");
       }
-      if (clasesRestantes <= 0) {
-        throw new Error("No tienes clases suficientes para realizar este cambio.");
-      }
+
 
       transaction.update(userRef, {
         clases_canceladas: [...canceladas, idTurnoOrigen],
@@ -157,9 +153,7 @@ export const registrarAsistenciaAlumno = async (db, uid, fechaIsoString, horaTur
       const clasesRestantes = data.clases_restantes ?? 0;
       const esExtra = data.clases_extra?.includes(`${fechaIsoString}_${horaTurno}`);
       
-      if (!esExtra && clasesRestantes <= 0) {
-        throw new Error("No tienes clases restantes para descontar.");
-      }
+
 
       const historial = data.historial_asistencias || [];
       
@@ -208,9 +202,7 @@ export const registrarInasistenciaAlumno = async (db, uid, fechaIsoString, horaT
       const clasesRestantes = data.clases_restantes ?? 0;
       const esExtra = data.clases_extra?.includes(`${fechaIsoString}_${horaTurno}`);
 
-      if (!esExtra && clasesRestantes <= 0) {
-        throw new Error("No tienes clases restantes para descontar.");
-      }
+
 
       const historial = data.historial_asistencias || [];
       
