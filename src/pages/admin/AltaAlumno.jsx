@@ -107,7 +107,10 @@ export default function AltaAlumno() {
         ...(useAdminStore.getState().preRegistrosInactivos || [])
       ];
       
-      const emailYaRegistrado = todosLosUsuarios.some(u => u.email === emailId || u.id === emailId);
+      const emailYaRegistrado = todosLosUsuarios.some(u => 
+        (u.email && u.email.toLowerCase() === emailId) || 
+        (u.id && u.id.toLowerCase() === emailId)
+      );
       
       if (emailYaRegistrado) {
         alert("Error: Este email ya está registrado para otro alumno o profesor. Por favor usa un email diferente.");

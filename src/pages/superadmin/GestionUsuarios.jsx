@@ -119,6 +119,26 @@ export default function GestionUsuarios() {
     try {
       setIsSavingProfe(true);
       const emailId = profeForm.email.trim().toLowerCase();
+      
+      // Validar si el email ya existe en el sistema
+      const todosLosUsuarios = [
+        ...usuarios,
+        ...(useAdminStore.getState().usuariosInactivos || []),
+        ...preRegistros,
+        ...(useAdminStore.getState().preRegistrosInactivos || [])
+      ];
+      
+      const emailYaRegistrado = todosLosUsuarios.some(u => 
+        (u.email && u.email.toLowerCase() === emailId) || 
+        (u.id && u.id.toLowerCase() === emailId)
+      );
+      
+      if (emailYaRegistrado) {
+        alert("Error: Este email ya está registrado para otro alumno o profesor. Por favor usa un email diferente.");
+        setIsSavingProfe(false);
+        return;
+      }
+
       const preRegistroRef = doc(db, 'pre_registros', emailId);
       await setDoc(preRegistroRef, {
         nombre: profeForm.nombre,
