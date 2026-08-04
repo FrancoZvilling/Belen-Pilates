@@ -11,14 +11,15 @@ export default function ModificarHorariosModal({ isOpen, onClose, alumno }) {
   
   const [seleccionados, setSeleccionados] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [nuevoPlan, setNuevoPlan] = useState(alumno?.plan || 8);
   
-  // Determinar max selecciones
-  const plan = alumno?.plan || 8;
-  const maxSelecciones = plan === 4 ? 1 : (plan === 8 ? 2 : 3);
+  // Determinar max selecciones basado en el plan seleccionado actualmente en la UI
+  const maxSelecciones = nuevoPlan === 4 ? 1 : (nuevoPlan === 8 ? 2 : 3);
 
-  // Inicializar las selecciones
+  // Inicializar las selecciones y el plan
   useEffect(() => {
     if (isOpen && alumno) {
+      setNuevoPlan(alumno.plan || 8);
       const turnosActuales = alumno.turnos_fijos || alumno.turnosFijos || [];
       const initSeleccion = turnosActuales.map(t => ({
         id: `${t.dia}-${t.hora}`,
@@ -28,6 +29,14 @@ export default function ModificarHorariosModal({ isOpen, onClose, alumno }) {
       setSeleccionados(initSeleccion);
     }
   }, [isOpen, alumno]);
+
+  const handlePlanChange = (planElegido) => {
+    setNuevoPlan(planElegido);
+    const nuevoMax = planElegido === 4 ? 1 : (planElegido === 8 ? 2 : 3);
+    if (seleccionados.length > nuevoMax) {
+      setSeleccionados([]);
+    }
+  };
 
   if (!alumno) return null;
 
@@ -68,7 +77,7 @@ export default function ModificarHorariosModal({ isOpen, onClose, alumno }) {
       if (seleccionados.length < maxSelecciones) {
         setSeleccionados([...seleccionados, { id: idSeleccion, dia, hora }]);
       } else {
-        alert(`El plan de este alumno (${plan} clases) solo permite ${maxSelecciones} turnos fijos por semana.`);
+        alert(`El plan seleccionado (${nuevoPlan} clases) solo permite ${maxSelecciones} turnos fijos por semana.`);
       }
     }
   };
@@ -98,7 +107,8 @@ export default function ModificarHorariosModal({ isOpen, onClose, alumno }) {
       const nuevosTurnosFijos = seleccionados.map(s => ({ dia: s.dia, hora: s.hora }));
       
       await updateDoc(userRef, {
-        turnos_fijos: nuevosTurnosFijos
+        turnos_fijos: nuevosTurnosFijos,
+        plan: nuevoPlan
       });
       
       alert('Horarios actualizados exitosamente.');
@@ -119,13 +129,28 @@ export default function ModificarHorariosModal({ isOpen, onClose, alumno }) {
     >
       <div className="py-2 space-y-6">
         
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-sm text-gray-500">
-            Plan actual: <span className="font-bold text-gray-800">{plan} Clases ({maxSelecciones}x semana)</span>
-          </p>
-          <span className="text-xs font-bold px-3 py-1 bg-gray-100 text-gray-600 rounded-full">
-            {seleccionados.length} / {maxSelecciones} asignados
-          </span>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-gray-700">Plan Mensual (Base)</h3>
+            <span className="text-xs font-bold px-3 py-1 bg-gray-100 text-gray-600 rounded-full">
+              {seleccionados.length} / {maxSelecciones} turnos asignados
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {[4, 8, 12].map(p => (
+              <button
+                key={p}
+                onClick={() => handlePlanChange(p)}
+                className={`py-2 px-1 rounded-xl text-sm font-bold border-2 transition-all ${
+                  nuevoPlan === p 
+                  ? 'border-primary-turnos bg-primary-turnos/10 text-primary-turnos' 
+                  : 'border-gray-100 bg-white text-gray-400 hover:border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                {p} Clases
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="hidden md:block overflow-x-auto">
