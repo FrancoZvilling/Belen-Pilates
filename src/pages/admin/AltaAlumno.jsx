@@ -36,7 +36,28 @@ export default function AltaAlumno() {
   const [isSaving, setIsSaving] = useState(false);
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    if (e.target.name === 'email') {
+      let val = e.target.value;
+      // Eliminar espacios y cosas raras pegadas por error
+      val = val.split(' ')[0].replace(/\s/g, '').toLowerCase();
+      setFormData({ ...formData, email: val });
+    } else {
+      setFormData({ ...formData, [e.target.name]: e.target.value });
+    }
+  };
+
+  const dominiosPermitidos = [
+    'gmail.com', 'gmail.com.ar',
+    'hotmail.com', 'hotmail.com.ar',
+    'outlook.com', 'outlook.com.ar',
+    'yahoo.com', 'yahoo.com.ar',
+    'live.com', 'live.com.ar'
+  ];
+
+  const isEmailValido = (email) => {
+    if (!email || !email.includes('@')) return false;
+    const dominio = email.split('@')[1];
+    return dominiosPermitidos.includes(dominio);
   };
 
   const handlePlanChange = (nuevoPlan) => {
@@ -88,6 +109,10 @@ export default function AltaAlumno() {
   const handleGuardar = async () => {
     if (!formData.nombre || !formData.email) {
       alert("Por favor completa el nombre y el email.");
+      return;
+    }
+    if (!isEmailValido(formData.email)) {
+      alert("El correo debe ser obligatoriamente de Gmail, Hotmail, Outlook, Yahoo o Live.");
       return;
     }
     if (seleccionados.length === 0) {
@@ -169,9 +194,15 @@ export default function AltaAlumno() {
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Email</label>
               <input 
                 type="email" name="email" value={formData.email} onChange={handleChange}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-turnos focus:bg-white transition-colors"
+                className={`w-full bg-gray-50 border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-turnos focus:bg-white transition-colors ${formData.email && !isEmailValido(formData.email) ? 'border-red-500 bg-red-50 focus:ring-red-500' : 'border-gray-200'}`}
                 placeholder="Ej. laura@gmail.com"
               />
+              {formData.email && !isEmailValido(formData.email) && (
+                <p className="text-red-500 text-xs mt-1.5 font-semibold flex items-center">
+                  <AlertCircle size={14} className="mr-1 inline" />
+                  Solo Gmail, Hotmail, Outlook, Yahoo o Live.
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Teléfono</label>

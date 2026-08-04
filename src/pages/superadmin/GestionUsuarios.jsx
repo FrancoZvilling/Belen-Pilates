@@ -111,9 +111,27 @@ export default function GestionUsuarios() {
     }
   };
 
+  const dominiosPermitidos = [
+    'gmail.com', 'gmail.com.ar',
+    'hotmail.com', 'hotmail.com.ar',
+    'outlook.com', 'outlook.com.ar',
+    'yahoo.com', 'yahoo.com.ar',
+    'live.com', 'live.com.ar'
+  ];
+
+  const isEmailValido = (email) => {
+    if (!email || !email.includes('@')) return false;
+    const dominio = email.split('@')[1];
+    return dominiosPermitidos.includes(dominio);
+  };
+
   const handleGuardarProfesor = async () => {
     if (!profeForm.nombre || !profeForm.email) {
       alert('Por favor completá el nombre y el email del profesor.');
+      return;
+    }
+    if (!isEmailValido(profeForm.email)) {
+      alert("El correo debe ser obligatoriamente de Gmail, Hotmail, Outlook, Yahoo o Live.");
       return;
     }
     try {
@@ -463,10 +481,20 @@ export default function GestionUsuarios() {
             <input
               type="email"
               value={profeForm.email}
-              onChange={(e) => setProfeForm({ ...profeForm, email: e.target.value })}
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-pagos focus:bg-white transition-colors"
+              onChange={(e) => {
+                let val = e.target.value;
+                val = val.split(' ')[0].replace(/\s/g, '').toLowerCase();
+                setProfeForm({ ...profeForm, email: val });
+              }}
+              className={`w-full bg-gray-50 border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-pagos focus:bg-white transition-colors ${profeForm.email && !isEmailValido(profeForm.email) ? 'border-red-500 bg-red-50 focus:ring-red-500' : 'border-gray-200'}`}
               placeholder="Ej. maria@gmail.com"
             />
+            {profeForm.email && !isEmailValido(profeForm.email) && (
+              <p className="text-red-500 text-xs mt-1.5 font-semibold flex items-center">
+                <AlertCircle size={14} className="mr-1 inline" />
+                Solo Gmail, Hotmail, Outlook, Yahoo o Live.
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Teléfono</label>
