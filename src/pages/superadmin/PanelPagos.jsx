@@ -3,7 +3,7 @@ import { useAdminStore } from '../../store/adminStore';
 import { useAuthStore } from '../../store/authStore';
 import { db } from '../../config/firebase';
 import { registrarPagoAlumno, actualizarPrecios } from '../../services/turnosService';
-import { DollarSign, AlertTriangle, XCircle, Search, Filter, CreditCard, CheckCircle, LogOut, Settings, Users } from 'lucide-react';
+import { DollarSign, AlertTriangle, XCircle, Search, Filter, CreditCard, CheckCircle, LogOut, Settings, Users, Edit3 } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 
 export default function PanelPagos() {
@@ -23,6 +23,11 @@ export default function PanelPagos() {
   const [nuevoPrecio4, setNuevoPrecio4] = useState(precios?.plan_4_clases || 0);
   const [nuevoPrecio8, setNuevoPrecio8] = useState(precios?.plan_8_clases || 0);
   const [nuevoPrecio12, setNuevoPrecio12] = useState(precios?.plan_12_clases || 0);
+
+  // Modal de Notas
+  const [isNotaModalOpen, setIsNotaModalOpen] = useState(false);
+  const [alumnoNota, setAlumnoNota] = useState(null);
+  const [textoNota, setTextoNota] = useState('');
 
   // Calcular fechas para filtros de mes
   const d = new Date();
@@ -73,13 +78,37 @@ export default function PanelPagos() {
   // Filtrado final
   const alumnosFiltrados = alumnosProcesados.filter(a => {
     const matchesSearch = a.nombre.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === 'todos' || a.estado_pago === filterStatus;
+    const matchesStatus = filterStatus === 'todos' || a.estado_pago === filterStatus || (filterStatus === 'con_notas' && a.observaciones_pago && a.observaciones_pago.trim() !== '');
     return matchesSearch && matchesStatus;
   });
 
   const handlePagarClick = (alumno) => {
     setAlumnoSeleccionado(alumno);
     setIsPagoModalOpen(true);
+  };
+
+  const handleAbrirNota = (alumno) => {
+    setAlumnoNota(alumno);
+    setTextoNota(alumno.observaciones_pago || '');
+    setIsNotaModalOpen(true);
+  };
+
+  const handleGuardarNota = async () => {
+    if (alumnoNota) {
+      setIsProcessing(true);
+      try {
+        const { doc, updateDoc } = await import('firebase/firestore');
+        const userRef = doc(db, 'usuarios', alumnoNota.id);
+        await updateDoc(userRef, { observaciones_pago: textoNota });
+        setIsNotaModalOpen(false);
+        setAlumnoNota(null);
+      } catch (error) {
+        console.error("Error guardando nota:", error);
+        alert("Hubo un error al guardar la nota.");
+      } finally {
+        setIsProcessing(false);
+      }
+    }
   };
 
   const handleConfirmarPago = async () => {
@@ -208,6 +237,7 @@ export default function PanelPagos() {
               <option value="pagado">Pagado</option>
               <option value="pendiente">Pendiente</option>
               <option value="vencido">Vencido</option>
+              <option value="con_notas">Con Notas</option>
             </select>
           </div>
         </section>
@@ -246,18 +276,31 @@ export default function PanelPagos() {
                         </span>
                       </td>
                       <td className="p-4 text-right">
-                        {(alumno.estado_pago === 'pendiente' || alumno.estado_pago === 'vencido') ? (
-                          <button 
-                            onClick={() => handlePagarClick(alumno)}
-                            className="bg-primary-pagos text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-transform"
+                        <div className="flex items-center justify-end space-x-2">
+                          <button
+                            onClick={() => handleAbrirNota(alumno)}
+                            title={alumno.observaciones_pago ? "Ver Nota" : "Añadir Nota"}
+                            className={`p-2 rounded-lg transition-colors relative ${alumno.observaciones_pago ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
                           >
-                            Registrar Pago
+                            <Edit3 size={16} />
+                            {alumno.observaciones_pago && (
+                              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                            )}
                           </button>
-                        ) : (
-                          <span className="text-gray-400 font-semibold text-xs flex items-center justify-end">
-                            <CheckCircle size={14} className="mr-1" /> Al día
-                          </span>
-                        )}
+                          
+                          {(alumno.estado_pago === 'pendiente' || alumno.estado_pago === 'vencido') ? (
+                            <button 
+                              onClick={() => handlePagarClick(alumno)}
+                              className="bg-primary-pagos text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-transform"
+                            >
+                              Registrar Pago
+                            </button>
+                          ) : (
+                            <span className="text-gray-400 font-semibold text-xs flex items-center h-8">
+                              <CheckCircle size={14} className="mr-1" /> Al día
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -378,6 +421,41 @@ export default function PanelPagos() {
               disabled={isProcessing}
             >
               {isProcessing ? 'Guardando...' : 'Guardar Precios'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal de Notas */}
+      <Modal
+        isOpen={isNotaModalOpen}
+        onClose={() => setIsNotaModalOpen(false)}
+        title={alumnoNota ? `Nota: ${alumnoNota.nombre}` : 'Nota del Alumno'}
+      >
+        <div className="space-y-4 py-2">
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-2">Observaciones</label>
+            <textarea
+              value={textoNota}
+              onChange={(e) => setTextoNota(e.target.value)}
+              placeholder="Ej. Viene a pagar el día 10..."
+              rows={4}
+              className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-pagos outline-none resize-none font-medium text-gray-700"
+            />
+          </div>
+          <div className="pt-4 flex space-x-3">
+            <button 
+              onClick={() => { setTextoNota(''); }}
+              className="flex-1 py-3 bg-red-50 text-red-600 font-bold rounded-xl hover:bg-red-100 transition-colors"
+            >
+              Borrar Nota
+            </button>
+            <button 
+              onClick={handleGuardarNota}
+              className="flex-1 py-3 bg-primary-pagos text-white font-bold rounded-xl hover:bg-opacity-90 transition-colors"
+              disabled={isProcessing}
+            >
+              {isProcessing ? 'Guardando...' : 'Guardar Nota'}
             </button>
           </div>
         </div>
