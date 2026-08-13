@@ -7,10 +7,13 @@ import { db } from '../../config/firebase';
 import { registrarAsistenciaAlumno } from '../../services/turnosService';
 import { generarAgendaUsuario } from '../../utils/calendarUtils';
 
+import Modal from '../../components/common/Modal';
+
 export default function AsistenciasDiarias() {
   const logout = useAuthStore(state => state.logout);
   const { usuarios, preRegistros } = useAdminStore();
   const [asistenciaHabilitada, setAsistenciaHabilitada] = useState(false);
+  const [notaSeleccionada, setNotaSeleccionada] = useState(null);
 
   const todosLosUsuarios = [...usuarios, ...preRegistros];
 
@@ -150,7 +153,8 @@ export default function AsistenciasDiarias() {
         id: id,
         usuarioId: usuario.id,
         estado: estadoDB,
-        alumno: usuario.nombre
+        alumno: usuario.nombre,
+        nota: usuario.observaciones_pago || null
       };
     } else {
       return {
@@ -264,11 +268,30 @@ export default function AsistenciasDiarias() {
                 camilla={camilla} 
                 onMarcarPresente={handleMarcarPresente}
                 asistenciaHabilitada={asistenciaHabilitada}
+                onVerNota={(nota) => setNotaSeleccionada(nota)}
               />
             ))}
           </div>
         )}
       </div>
+
+      <Modal 
+        isOpen={!!notaSeleccionada} 
+        onClose={() => setNotaSeleccionada(null)}
+        title="Nota del Alumno"
+      >
+        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 min-h-[100px] text-gray-700 whitespace-pre-wrap">
+          {notaSeleccionada}
+        </div>
+        <div className="mt-4 flex justify-end">
+          <button 
+            onClick={() => setNotaSeleccionada(null)}
+            className="px-4 py-2 bg-gray-200 text-gray-700 font-bold rounded-lg"
+          >
+            Cerrar
+          </button>
+        </div>
+      </Modal>
 
     </div>
   );
