@@ -378,12 +378,15 @@ export const ejecutarBarridoInasistencias = async (db, usuariosActivos) => {
       
       // Crear notificaciones individuales para cada inasistencia retroactiva o actual detectada
       for (const inasistencia of nuevasInasistencias) {
+        const [yy, mm, dd] = inasistencia.fecha.split('-');
+        const fechaFormateada = `${dd}-${mm}-${yy}`;
+
         const notifRef = doc(collection(db, 'notificaciones'));
         batch.set(notifRef, {
           usuarioId: usuario.id,
           tipo: 'inasistencia',
           titulo: 'Inasistencia Automática',
-          mensaje: `Se ha registrado una inasistencia a tu clase del día ${inasistencia.dia} (${inasistencia.fecha}).`,
+          mensaje: `Se ha registrado una inasistencia a tu clase del día ${inasistencia.dia} (${fechaFormateada}).`,
           leida: false,
           fecha: new Date().toISOString()
         });
