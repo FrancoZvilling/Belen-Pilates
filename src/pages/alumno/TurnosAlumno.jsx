@@ -265,7 +265,10 @@ export default function TurnosAlumno() {
               </div>
             </div>
           </div>
-        )}      {/* DEV BUTTON FOR TEST USER */}
+        )}
+      </div>
+
+      {/* DEV BUTTON FOR TEST USER */}
       {user?.uid === 'aw5z1Nv1Ylh45kwscfalJCOy5Gi1' && (
         <div className="fixed bottom-24 right-5 z-50">
           <button 
