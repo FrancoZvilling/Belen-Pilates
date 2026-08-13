@@ -93,7 +93,7 @@ export default function DashboardAlumno() {
     <div className="bg-gray-50 min-h-screen pb-24 font-sans">
       
       {/* 1. Header (Bienvenida) */}
-      <header className="px-5 pt-8 pb-4 flex justify-between items-center bg-white sticky top-0 z-10 shadow-sm">
+      <header className="px-5 pt-8 pb-4 flex justify-between items-center bg-white sticky top-0 z-50 shadow-sm">
         <h1 className="text-3xl font-black text-gray-800 tracking-tight">
           Hola, {userNombre} <span className="inline-block animate-wave">👋</span>
         </h1>

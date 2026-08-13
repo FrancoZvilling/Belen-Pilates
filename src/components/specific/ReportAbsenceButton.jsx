@@ -26,6 +26,26 @@ export default function ReportAbsenceButton() {
     fetchFeriados();
   }, []);
 
+  // Calcular estado de pago
+  const isVencido = (() => {
+    if (!userData?.vencimiento_pago) return true;
+    const d = new Date();
+    const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+    const todayDate = new Date(utc + (3600000 * -3));
+    todayDate.setHours(0, 0, 0, 0);
+
+    const venc = new Date(userData.vencimiento_pago + 'T12:00:00Z');
+    const diffTime = venc.getTime() - todayDate.getTime();
+    const diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    return diasRestantes < 0;
+  })();
+
+  // Si no tiene clases restantes Y está vencido, no mostrar el botón
+  if (userData?.clases_restantes <= 0 && isVencido) {
+    return null;
+  }
+
   // Calcular la próxima clase a la que se puede avisar inasistencia
   const getProximaClase = () => {
     if (!userData) return null;
