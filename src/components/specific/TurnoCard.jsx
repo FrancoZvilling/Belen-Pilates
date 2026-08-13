@@ -45,7 +45,7 @@ export default function TurnoCard({ turno, onCambiar, onCancelar }) {
       ) : turno.isCancelado ? (
         <div className="mt-4 flex items-center justify-center py-2.5 bg-gray-100 text-gray-500 font-bold rounded-lg text-sm border border-gray-200">
           <XCircle size={16} className="mr-2" />
-          Cancelado
+          Falta con Aviso
         </div>
       ) : turno.isPresente ? (
         <div className="mt-4 flex items-center justify-center py-2.5 bg-green-50 text-green-700 font-bold rounded-lg text-sm border border-green-100">
@@ -64,18 +64,11 @@ export default function TurnoCard({ turno, onCambiar, onCancelar }) {
       ) : isCancelable ? (
         <div className="flex gap-2 mt-4">
           <button 
-            onClick={() => onCambiar(turno)}
-            className="flex-1 flex items-center justify-center py-2.5 bg-primary-asistencia text-white font-semibold rounded-lg text-sm transition-transform active:scale-95"
-          >
-            <RefreshCw size={16} className="mr-2" />
-            Cambiar
-          </button>
-          <button 
             onClick={() => onCancelar(turno)}
-            className="px-4 flex items-center justify-center py-2.5 bg-red-50 text-red-600 font-semibold rounded-lg text-sm transition-colors active:bg-red-100"
-            aria-label="Cancelar turno"
+            className="flex-1 flex items-center justify-center py-2.5 bg-gray-100 text-gray-600 font-semibold rounded-lg text-sm transition-colors active:bg-gray-200 hover:bg-gray-200"
           >
-            <XCircle size={20} />
+            <XCircle size={16} className="mr-2" />
+            Avisar Inasistencia
           </button>
         </div>
       ) : (

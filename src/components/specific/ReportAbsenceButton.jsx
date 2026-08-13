@@ -110,7 +110,7 @@ export default function ReportAbsenceButton() {
           <h3 className="text-lg font-black text-gray-800 mb-2">
             ¿Confirmás tu inasistencia?
           </h3>
-          <p className="text-gray-600 text-sm mb-1">
+          <p className="text-gray-600 text-sm mb-4">
             Clase del <span className="font-bold">{proximaClase.fechaDisplay}</span> a las <span className="font-bold">{proximaClase.hora} hs</span>
           </p>
 

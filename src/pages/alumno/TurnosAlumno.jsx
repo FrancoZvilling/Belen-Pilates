@@ -29,12 +29,7 @@ export default function TurnosAlumno() {
   const misTurnos = misTurnosBrutos.filter(t => !(t.estadoEspecial === 'ausente_pago' && t.tipo === 'Fijo'));
 
   const [activeTab, setActiveTab] = useState('proximos');
-  const [turnoACambiar, setTurnoACambiar] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   
-  const [bolsaTurnos, setBolsaTurnos] = useState([]);
-  const [isLoadingBolsa, setIsLoadingBolsa] = useState(false);
-
   // Generar historial real desde Firebase
   const historialReal = userData?.historial_asistencias ? [...userData.historial_asistencias].reverse() : [];
   const inasistenciasList = historialReal.filter(h => h.estado === 'ausente');
@@ -64,66 +59,17 @@ export default function TurnosAlumno() {
     }));
   };
 
-  // Cargar Bolsa solo cuando se abre un modal
-  useEffect(() => {
-    if (isModalOpen) {
-      const cargarBolsa = async () => {
-        setIsLoadingBolsa(true);
-        try {
-          const [snapUsuarios, snapPre] = await Promise.all([
-            getDocs(collection(db, 'usuarios')),
-            getDocs(collection(db, 'pre_registros'))
-          ]);
-          
-          const users = snapUsuarios.docs.map(d => ({id: d.id, ...d.data()})).filter(u => u.estado !== 'inactivo');
-          const preRegs = snapPre.docs.map(d => ({id: d.id, ...d.data()}));
-          
-          const todosActivos = [...users, ...preRegs];
-          setBolsaTurnos(generarBolsaDeTurnos(todosActivos, 7, user.uid, feriadosGlobales));
-        } catch (error) {
-          console.error("Error calculando bolsa:", error);
-        } finally {
-          setIsLoadingBolsa(false);
-        }
-      };
-      cargarBolsa();
-    }
-  }, [isModalOpen]);
-
-  const handleCambiarClick = (turno) => {
-    if (turno.isCancelado) return alert("Este turno ya fue cancelado.");
-    if (turno.isPresente || turno.isAusente) return alert("Este turno ya pasó y está registrado en tu historial.");
-    setTurnoACambiar(turno);
-    setIsModalOpen(true);
-  };
-
-  const handleConfirmarSwap = async (turnoBolsa) => {
-    if (turnoACambiar) {
-      const mensaje = `¿Estás seguro que querés cambiar tu turno del ${turnoACambiar.fecha} a las ${turnoACambiar.hora} hs por el nuevo turno del ${turnoBolsa.fecha} a las ${turnoBolsa.hora} hs?`;
-      if (!window.confirm(mensaje)) return;
-
-      const res = await intercambiarTurno(db, user.uid, turnoBolsa.id, turnoACambiar.id);
-      if (res.success) {
-        alert("¡Turno cambiado con éxito!");
-        setIsModalOpen(false);
-        setTurnoACambiar(null);
-      } else {
-        alert("Error al cambiar turno: " + res.error);
-      }
-    }
-  };
-
   const handleCancelarClick = async (turno) => {
-    if (turno.isCancelado) return alert("Ya cancelaste este turno.");
+    if (turno.isCancelado) return alert("Ya avisaste tu inasistencia para este turno.");
     
-    const mensajeConfirm = `¿Estás seguro de cancelar tu turno del ${turno.fecha}? Recordá que ya no utilizamos sistema de créditos, por lo que este turno se perderá.`;
+    const mensajeConfirm = `¿Confirmás tu inasistencia para la clase del ${turno.fecha}?`;
 
     if (window.confirm(mensajeConfirm)) {
       const res = await cancelarClaseAnticipada(db, user.uid, turno.id);
       if (res.success) {
-        alert("Turno cancelado exitosamente.");
+        alert("Aviso de inasistencia enviado correctamente.");
       } else {
-        alert("Error al cancelar: " + res.error);
+        alert("Error al enviar el aviso: " + res.error);
       }
     }
   };
