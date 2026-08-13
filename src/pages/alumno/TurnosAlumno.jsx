@@ -269,52 +269,7 @@ export default function TurnosAlumno() {
         )}
       </div>
 
-      {/* MODAL: SWAP (CAMBIAR TURNO) */}
-      <Modal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        title="Cambiar Turno"
-      >
-        <p className="text-sm text-gray-600 mb-4">
-          Estás cambiando tu turno del <span className="font-bold">{turnoACambiar?.fecha}</span>. Elige uno nuevo:
-        </p>
 
-        <div className="space-y-3">
-          {isLoadingBolsa ? (
-            <div className="text-center py-6">
-              <div className="w-8 h-8 border-4 border-gray-200 border-t-primary-asistencia rounded-full animate-spin mx-auto mb-2"></div>
-              <p className="text-gray-500 font-medium">Buscando turnos disponibles...</p>
-            </div>
-          ) : bolsaTurnos.filter(b => b.ocupacion < b.capacidad).length > 0 ? (
-            bolsaTurnos.filter(b => b.ocupacion < b.capacidad).map((turnoBolsa) => {
-              const lugaresLibres = turnoBolsa.capacidad - turnoBolsa.ocupacion;
-              return (
-                <div 
-                  key={turnoBolsa.id} 
-                  className="flex items-center justify-between p-3 border border-gray-100 rounded-xl hover:border-primary-asistencia transition-colors bg-white shadow-sm cursor-pointer"
-                  onClick={() => handleConfirmarSwap(turnoBolsa)}
-                >
-                  <div>
-                    <h4 className="font-bold text-gray-800">{turnoBolsa.fecha}</h4>
-                    <p className="text-sm text-gray-500">{turnoBolsa.hora} hs</p>
-                  </div>
-                  <div className="text-right">
-                    <span className={`text-xs font-bold px-2 py-1 rounded-lg ${lugaresLibres === 1 ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-700'}`}>
-                      {lugaresLibres} lugar{lugaresLibres > 1 ? 'es' : ''}
-                    </span>
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-6 text-center">
-              <Calendar className="mx-auto text-gray-300 mb-2" size={24} />
-              <p className="font-bold text-gray-600 text-sm">No hay turnos disponibles</p>
-              <p className="text-xs text-gray-400 mt-1">Nadie ha cancelado turnos recientemente. Vuelve a intentar más tarde.</p>
-            </div>
-          )}
-        </div>
-      </Modal>
 
     </div>
   );
