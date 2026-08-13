@@ -135,7 +135,6 @@ export default function TurnosAlumno() {
                   <TurnoCard 
                     key={turno.id}
                     turno={turno}
-                    onCambiar={handleCambiarClick}
                     onCancelar={handleCancelarClick}
                   />
                 ))

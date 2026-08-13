@@ -1,6 +1,6 @@
 import { Calendar, Clock, RefreshCw, XCircle, CheckCircle, AlertCircle } from 'lucide-react';
 
-export default function TurnoCard({ turno, onCambiar, onCancelar }) {
+export default function TurnoCard({ turno, onCancelar }) {
   const d = new Date();
   const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
   const now = new Date(utc + (3600000 * -3)); // Arg time
