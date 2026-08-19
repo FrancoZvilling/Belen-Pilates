@@ -35,7 +35,7 @@ export default function DashboardAlumno() {
     fetchFeriados();
   }, []);
 
-  const misTurnosBrutos = userData ? generarAgendaUsuario(userData, 14, feriadosGlobales) : [];
+  const misTurnosBrutos = userData ? generarAgendaUsuario(userData, 14, feriadosGlobales, true) : [];
   const misTurnos = misTurnosBrutos.filter(t => !(t.estadoEspecial === 'ausente_pago' && t.tipo === 'Fijo'));
 
   const [isNotifPanelOpen, setIsNotifPanelOpen] = useState(false);

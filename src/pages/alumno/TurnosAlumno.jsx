@@ -6,7 +6,7 @@ import { Calendar, History, CheckCircle, Info, RefreshCw, AlertCircle, ChevronDo
 import { db } from '../../config/firebase';
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { generarAgendaUsuario } from '../../utils/calendarUtils';
-import { intercambiarTurno, cancelarClaseAnticipada } from '../../services/turnosService';
+import { intercambiarTurno, cancelarClaseAnticipada, registrarInasistenciaAlumno } from '../../services/turnosService';
 
 export default function TurnosAlumno() {
   const { userData, user } = useAuthStore(state => state);
@@ -25,13 +25,15 @@ export default function TurnosAlumno() {
     fetchFeriados();
   }, []);
 
-  const misTurnosBrutos = userData ? generarAgendaUsuario(userData, 14, feriadosGlobales) : [];
+  const misTurnosBrutos = userData ? generarAgendaUsuario(userData, 14, feriadosGlobales, true) : [];
   const misTurnos = misTurnosBrutos.filter(t => !(t.estadoEspecial === 'ausente_pago' && t.tipo === 'Fijo'));
 
   const [activeTab, setActiveTab] = useState('proximos');
   
-  // Generar historial real desde Firebase
-  const historialReal = userData?.historial_asistencias ? [...userData.historial_asistencias].reverse() : [];
+  // Generar historial real desde Firebase (ignoramos los 'ausente_avisado' porque son futuros)
+  const historialReal = userData?.historial_asistencias 
+    ? [...userData.historial_asistencias].filter(h => h.estado !== 'ausente_avisado').reverse() 
+    : [];
   const inasistenciasList = historialReal.filter(h => h.estado === 'ausente');
 
   const agruparPorMes = (lista) => {
@@ -60,12 +62,12 @@ export default function TurnosAlumno() {
   };
 
   const handleCancelarClick = async (turno) => {
-    if (turno.isCancelado) return alert("Ya avisaste tu inasistencia para este turno.");
+    if (turno.isCancelado || turno.isAusente) return alert("Ya avisaste tu inasistencia para este turno.");
     
     const mensajeConfirm = `¿Confirmás tu inasistencia para la clase del ${turno.fecha}?`;
 
     if (window.confirm(mensajeConfirm)) {
-      const res = await cancelarClaseAnticipada(db, user.uid, turno.id);
+      const res = await registrarInasistenciaAlumno(db, user.uid, turno.fechaIsoString, turno.hora);
       if (res.success) {
         alert("Aviso de inasistencia enviado correctamente.");
       } else {

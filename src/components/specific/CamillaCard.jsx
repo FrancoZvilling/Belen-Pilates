@@ -130,5 +130,48 @@ export default function CamillaCard({ camilla, onMarcarPresente, asistenciaHabil
     );
   }
 
+  if (estado === 'ausente_avisado') {
+    return (
+      <div className="bg-gray-100 border-2 border-gray-300 rounded-2xl p-4 flex flex-col justify-between h-32 relative opacity-75">
+        <div className="absolute top-2 right-2 flex items-center space-x-2">
+          {nota && (
+            <button 
+              onClick={() => onVerNota(nota)}
+              className="text-yellow-500 bg-white p-1 rounded-full shadow-sm hover:bg-yellow-50 transition-colors relative z-10"
+              title="Ver nota"
+            >
+              <Pencil size={14} />
+              <span className="absolute top-0 right-0 w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+            </button>
+          )}
+          <div className="text-gray-400">
+            <User size={20} />
+          </div>
+        </div>
+
+        <div className="mt-1">
+          <h3 className="font-bold text-gray-500 text-sm truncate leading-tight pr-12">{alumno}</h3>
+          <span className="text-xs font-bold text-gray-500 uppercase tracking-wider mt-1 block leading-tight mb-2">Falta con Aviso</span>
+        </div>
+
+        <button 
+          onClick={() => {
+            if (window.confirm("¿Estás seguro que querés anular el aviso de inasistencia y marcarle el presente?")) {
+              onMarcarPresente(camilla.usuarioId);
+            }
+          }}
+          disabled={!asistenciaHabilitada}
+          className={`w-full mt-auto text-[10px] font-bold py-1.5 rounded-lg transition-transform ${
+            asistenciaHabilitada 
+              ? 'bg-gray-400 text-white active:scale-95 hover:bg-gray-500' 
+              : 'bg-gray-200 text-gray-400 cursor-not-allowed hidden'
+          }`}
+        >
+          Forzar Presente
+        </button>
+      </div>
+    );
+  }
+
   return null;
 }

@@ -106,7 +106,7 @@ export const generarBolsaDeTurnos = (usuariosActivos, diasHaciaFuturo = 14, curr
  * @param {number} diasHaciaFuturo - Días a proyectar (por defecto 14)
  * @returns {Array} - Array de objetos turno listos para UI
  */
-export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14, feriadosActivos = []) => {
+export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14, feriadosActivos = [], limitByClasses = false) => {
   if (!userData || userData.estado === 'inactivo') return [];
 
   let isVencido = false;
@@ -129,9 +129,13 @@ export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14, feriadosAct
   const diasMapLargo = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
   
   const agenda = [];
+  let clasesEncontradas = 0;
+  const clasesObjetivo = Math.max(0, userData.clases_restantes || 0);
+  const maxDias = limitByClasses ? 60 : diasHaciaFuturo;
 
-  // Recorrer los próximos "diasHaciaFuturo" días (incluyendo hoy)
-  for (let i = 0; i <= diasHaciaFuturo; i++) {
+  // Recorrer los próximos días
+  for (let i = 0; i <= maxDias; i++) {
+    if (limitByClasses && clasesEncontradas >= clasesObjetivo) break;
     const checkDate = new Date(argDate);
     checkDate.setDate(argDate.getDate() + i);
 
@@ -176,6 +180,15 @@ export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14, feriadosAct
       // Chequear si hay historial marcado real (presente/ausente)
       const registroHistorial = userData.historial_asistencias?.find(h => h.fecha === fechaIsoString && h.hora === fijo.hora);
 
+      const isAvisado = registroHistorial?.estado === 'ausente_avisado';
+      const isPresente = registroHistorial?.estado === 'presente';
+      const isAusenteDefinitivo = registroHistorial?.estado === 'ausente';
+      const isAusente = isAusenteDefinitivo || isAvisado;
+
+      if (limitByClasses && !isPresente && !isAusenteDefinitivo) {
+        clasesEncontradas++;
+      }
+
       agenda.push({
         id: idTurnoUnico,
         fechaOriginal: fijo.dia,
@@ -184,10 +197,10 @@ export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14, feriadosAct
         fechaPura: checkDate, // para ordenamiento duro
         hora: fijo.hora,
         tipo: 'Fijo',
-        isPresente: registroHistorial?.estado === 'presente',
-        isAusente: registroHistorial?.estado === 'ausente',
+        isPresente: isPresente,
+        isAusente: isAusenteDefinitivo,
         estadoEspecial: isVencido ? 'ausente_pago' : null,
-        isCancelado: false, // Ya no se muestra cancelado, simplemente desaparece o es normal
+        isCancelado: isAvisado, // Muestra el badge "Falta con Aviso"
         esIntercambiable: true // Los turnos fijos se pueden cambiar
       });
     });
@@ -219,6 +232,10 @@ export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14, feriadosAct
           return; // skip pushing the normal class below
         }
 
+        const isAvisado = registroHistorial?.estado === 'ausente_avisado';
+        const isPresente = registroHistorial?.estado === 'presente';
+        const isAusenteDefinitivo = registroHistorial?.estado === 'ausente';
+
         agenda.push({
           id: extra,
           fechaOriginal: diaSemanaNombre,
@@ -227,10 +244,10 @@ export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14, feriadosAct
           fechaPura: checkDate,
           hora: horaExtra,
           tipo: 'Recupero / Extra',
-          isPresente: registroHistorial?.estado === 'presente',
-          isAusente: registroHistorial?.estado === 'ausente',
+          isPresente: isPresente,
+          isAusente: isAusenteDefinitivo,
           estadoEspecial: null, // Las clases extra/recupero ya se pagaron con un crédito, no se bloquean por falta de pago
-          isCancelado: false,
+          isCancelado: isAvisado,
           esIntercambiable: false // Los turnos extra NO se pueden cambiar otra vez
         });
       }

@@ -147,6 +147,7 @@ export default function AsistenciasDiarias() {
 
       if (registro?.estado === 'presente') estadoDB = 'presente';
       else if (registro?.estado === 'ausente') estadoDB = 'ausente';
+      else if (registro?.estado === 'ausente_avisado') estadoDB = 'ausente_avisado';
       else if (turnoAgenda?.estadoEspecial === 'ausente_pago') estadoDB = 'ausente_pago';
 
       return {

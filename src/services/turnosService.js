@@ -155,23 +155,33 @@ export const registrarAsistenciaAlumno = async (db, uid, fechaIsoString, horaTur
       
 
 
-      const historial = data.historial_asistencias || [];
+      let historial = [...(data.historial_asistencias || [])];
       
-      // Para evitar dobles presentes en la misma clase
-      const yaDioPresente = historial.some(h => h.fecha === fechaIsoString && h.hora === horaTurno);
-      if (yaDioPresente) {
-        throw new Error("Ya registraste tu asistencia para esta clase.");
+      const indexRegistro = historial.findIndex(h => h.fecha === fechaIsoString && h.hora === horaTurno);
+
+      if (indexRegistro !== -1) {
+        const registroPrevio = historial[indexRegistro];
+        if (registroPrevio.estado === 'presente') {
+          throw new Error("Ya registraste tu asistencia para esta clase.");
+        }
+        
+        // Si había avisado que faltaba pero al final vino, lo pisamos
+        historial[indexRegistro] = {
+          ...registroPrevio,
+          estado: 'presente',
+          timestamp: new Date().toISOString()
+        };
+      } else {
+        historial.push({
+          fecha: fechaIsoString,
+          hora: horaTurno,
+          estado: 'presente',
+          timestamp: new Date().toISOString()
+        });
       }
 
-      const nuevoRegistro = {
-        fecha: fechaIsoString,
-        hora: horaTurno,
-        estado: 'presente',
-        timestamp: new Date().toISOString()
-      };
-
       const updateData = {
-        historial_asistencias: [...historial, nuevoRegistro]
+        historial_asistencias: historial
       };
 
       if (!esExtra) {
@@ -215,7 +225,8 @@ export const registrarInasistenciaAlumno = async (db, uid, fechaIsoString, horaT
       const nuevoRegistro = {
         fecha: fechaIsoString,
         hora: horaTurno,
-        estado: 'ausente',
+        estado: 'ausente_avisado',
+        descontada: false,
         timestamp: new Date().toISOString()
       };
 
@@ -223,12 +234,22 @@ export const registrarInasistenciaAlumno = async (db, uid, fechaIsoString, horaT
         historial_asistencias: [...historial, nuevoRegistro]
       };
 
-      if (!esExtra) {
-        updateData.clases_restantes = clasesRestantes - 1;
-      }
+      // Ya no descontamos clases_restantes por adelantado. Lo hará el lazy sweep.
 
       transaction.update(userRef, updateData);
     });
+
+    // Notificar al admin
+    try {
+      const userSnap = await getDoc(userRef);
+      const nombreAlumno = userSnap.exists() ? `${userSnap.data().nombre} ${userSnap.data().apellido || ''}`.trim() : 'Un alumno';
+      const [yy, mm, dd] = fechaIsoString.split('-');
+      const adminMsg = `**${nombreAlumno}** avisó que no asistirá a la clase del día **${dd}/${mm} a las ${horaTurno} hs**.`;
+      await crearNotificacion(db, 'admin', 'inasistencia', 'Aviso de Inasistencia', adminMsg);
+    } catch (notifErr) {
+      console.error("Error al enviar notif a admin:", notifErr);
+    }
+
     return { success: true };
   } catch (error) {
     console.error("Error registrando inasistencia:", error);
@@ -343,11 +364,20 @@ export const ejecutarBarridoInasistencias = async (db, usuariosActivos) => {
             if (feriadosGlobales.includes(fechaIsoString)) continue;
           }
           
-          // Verificar si ya hay un registro (presente o ausente) para esta clase
-          const yaRegistrado = historial.some(h => h.fecha === fechaIsoString && h.hora === clase.hora);
+          // Verificar si ya hay un registro para esta clase
+          const registroExistente = historial.find(h => h.fecha === fechaIsoString && h.hora === clase.hora);
           
-          if (!yaRegistrado) {
-            // Si es extra o le quedan clases, marcamos el ausente
+          if (registroExistente && registroExistente.estado === 'ausente_avisado' && !registroExistente.descontada) {
+            // El alumno avisó con anticipación. Ahora que la clase pasó, efectuamos el descuento.
+            registroExistente.estado = 'ausente';
+            registroExistente.descontada = true;
+            if (!clase.esExtra) {
+              clasesRestantes -= 1;
+            }
+            userModified = true;
+            // No creamos notificación porque el alumno ya sabía que iba a faltar
+          } else if (!registroExistente) {
+            // Si es extra o le quedan clases, marcamos el ausente automático
             if (clase.esExtra || clasesRestantes > 0) {
               historial.push({
                 fecha: fechaIsoString,
