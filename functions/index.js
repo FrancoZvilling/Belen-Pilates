@@ -1,8 +1,10 @@
 const { onDocumentCreated } = require('firebase-functions/v2/firestore');
 const { setGlobalOptions } = require('firebase-functions/v2');
-const admin = require('firebase-admin');
-admin.initializeApp();
+const { initializeApp } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
+const { getMessaging } = require('firebase-admin/messaging');
 
+initializeApp();
 setGlobalOptions({ region: 'southamerica-east1' });
 
 exports.sendPushNotification = onDocumentCreated('notificaciones/{docId}', async (event) => {
@@ -16,7 +18,7 @@ exports.sendPushNotification = onDocumentCreated('notificaciones/{docId}', async
   }
 
   try {
-    const db = admin.firestore();
+    const db = getFirestore();
     
     const usersSnap = await db.collection('usuarios')
       .where('rol', '==', 'superadmin')
@@ -41,18 +43,15 @@ exports.sendPushNotification = onDocumentCreated('notificaciones/{docId}', async
     }
 
     const payload = {
-      notification: {
+      data: {
         title: data.titulo || 'Nueva Notificación',
         body: data.mensaje || 'Tienes una nueva notificación en el sistema.',
-      },
-      data: {
         tipo: data.tipo || 'info',
       }
     };
 
-    const response = await admin.messaging().sendEachForMulticast({
+    const response = await getMessaging().sendEachForMulticast({
       tokens: tokens,
-      notification: payload.notification,
       data: payload.data,
     });
     console.log('Notifications sent:', response.successCount);
