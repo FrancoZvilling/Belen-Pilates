@@ -59,6 +59,12 @@ export const useAuthStore = create((set) => ({
         if (role === 'admin' || role === 'superadmin') {
           useAdminStore.getState().initializeAdminListeners();
         }
+
+        if (role === 'superadmin') {
+          import('../services/notificacionesService').then(module => {
+            module.requestPushNotificationPermission(db, firebaseUser.uid);
+          });
+        }
       } else {
         set({
           user: null,

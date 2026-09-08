@@ -1,4 +1,6 @@
 import { collection, addDoc, query, where, getDocs, updateDoc, doc, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { getToken } from 'firebase/messaging';
+import { messaging } from '../config/firebase';
 
 /**
  * Crea una notificación para un usuario específico.
@@ -97,5 +99,21 @@ export const borrarTodasLasNotificaciones = async (db, usuarioId) => {
     await batch.commit();
   } catch (error) {
     console.error('Error al borrar todas las notificaciones:', error);
+  }
+};
+
+export const requestPushNotificationPermission = async (db, usuarioId) => {
+  if (!messaging) return;
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      const token = await getToken(messaging, { vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY });
+      if (token) {
+        await updateDoc(doc(db, 'usuarios', usuarioId), { fcmToken: token });
+        console.log('FCM Token guardado');
+      }
+    }
+  } catch (error) {
+    console.error('Error al solicitar permiso de notificaciones push:', error);
   }
 };
