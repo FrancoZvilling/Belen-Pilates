@@ -270,53 +270,6 @@ export default function TurnosAlumno() {
         )}
       </div>
 
-      {/* DEV BUTTON FOR TEST USER */}
-      {user?.uid === 'aw5z1Nv1Ylh45kwscfalJCOy5Gi1' && (
-        <div className="fixed bottom-24 right-5 z-50">
-          <button 
-            onClick={async () => {
-              if (!window.confirm("¿Cargar historial falso?")) return;
-              
-              const historialFalso = [];
-              const estados = ['presente', 'ausente'];
-              const d = new Date();
-              
-              // Generar 30 clases en los últimos 3 meses
-              for (let i = 0; i < 30; i++) {
-                const pastDate = new Date(d);
-                pastDate.setDate(d.getDate() - Math.floor(Math.random() * 90) - 1);
-                
-                const y = pastDate.getFullYear();
-                const m = String(pastDate.getMonth() + 1).padStart(2, '0');
-                const day = String(pastDate.getDate()).padStart(2, '0');
-                
-                historialFalso.push({
-                  fecha: `${y}-${m}-${day}`,
-                  hora: "10:00",
-                  estado: estados[Math.floor(Math.random() * estados.length)],
-                  timestamp: pastDate.toISOString(),
-                  motivo: 'historial_falso'
-                });
-              }
-              
-              historialFalso.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
-              
-              try {
-                const userRef = doc(db, 'usuarios', user.uid);
-                await updateDoc(userRef, { historial_asistencias: historialFalso });
-                alert("¡Historial falso cargado! Recargá la página.");
-              } catch (e) {
-                console.error(e);
-                alert("Error cargando historial");
-              }
-            }}
-            className="bg-black text-white text-xs px-4 py-2 rounded-full font-bold shadow-lg"
-          >
-            DEV: Cargar Historial
-          </button>
-        </div>
-      )}
-
     </div>
   );
 }

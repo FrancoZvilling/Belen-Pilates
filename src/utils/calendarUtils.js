@@ -109,22 +109,17 @@ export const generarBolsaDeTurnos = (usuariosActivos, diasHaciaFuturo = 14, curr
 export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14, feriadosActivos = [], limitByClasses = false) => {
   if (!userData || userData.estado === 'inactivo') return [];
 
-  let isVencido = false;
+  let venc = null;
   if (userData.vencimiento_pago) {
-    const d = new Date();
-    const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
-    const todayDate = new Date(utc + (3600000 * -3));
-    todayDate.setHours(0, 0, 0, 0);
-
-    const venc = new Date(userData.vencimiento_pago + 'T12:00:00Z');
-    isVencido = venc.getTime() < todayDate.getTime();
-  } else {
-    isVencido = true;
+    venc = new Date(userData.vencimiento_pago + 'T12:00:00Z');
+    // Normalizamos el vencimiento a medianoche para comparaciones
+    venc.setHours(0, 0, 0, 0);
   }
 
   const d = new Date();
   const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
   const argDate = new Date(utc + (3600000 * -3)); // UTC-3 (Argentina)
+  argDate.setHours(0, 0, 0, 0);
 
   const diasMapLargo = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
   
@@ -189,6 +184,9 @@ export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14, feriadosAct
         clasesEncontradas++;
       }
 
+      // Verificamos si esta clase específica cae después de su fecha de vencimiento
+      const isClaseVencida = !venc || checkDate.getTime() > venc.getTime();
+
       agenda.push({
         id: idTurnoUnico,
         fechaOriginal: fijo.dia,
@@ -199,7 +197,7 @@ export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14, feriadosAct
         tipo: 'Fijo',
         isPresente: isPresente,
         isAusente: isAusenteDefinitivo,
-        estadoEspecial: isVencido ? 'ausente_pago' : null,
+        estadoEspecial: isClaseVencida ? 'ausente_pago' : null,
         isCancelado: isAvisado, // Muestra el badge "Falta con Aviso"
         esIntercambiable: true // Los turnos fijos se pueden cambiar
       });
@@ -236,6 +234,8 @@ export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14, feriadosAct
         const isPresente = registroHistorial?.estado === 'presente';
         const isAusenteDefinitivo = registroHistorial?.estado === 'ausente';
 
+        const isClaseVencida = !venc || checkDate.getTime() > venc.getTime();
+
         agenda.push({
           id: extra,
           fechaOriginal: diaSemanaNombre,
@@ -246,9 +246,9 @@ export const generarAgendaUsuario = (userData, diasHaciaFuturo = 14, feriadosAct
           tipo: 'Recupero / Extra',
           isPresente: isPresente,
           isAusente: isAusenteDefinitivo,
-          estadoEspecial: null, // Las clases extra/recupero ya se pagaron con un crédito, no se bloquean por falta de pago
+          estadoEspecial: isClaseVencida ? 'ausente_pago' : null,
           isCancelado: isAvisado,
-          esIntercambiable: false // Los turnos extra NO se pueden cambiar otra vez
+          esIntercambiable: false // Los turnos extra no se pueden volver a cambiar
         });
       }
     });

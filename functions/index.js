@@ -13,39 +13,38 @@ exports.sendPushNotification = onDocumentCreated('notificaciones/{docId}', async
 
   const data = snap.data();
 
-  if (data.usuarioId !== 'admin') {
-    return;
-  }
-
   try {
     const db = getFirestore();
+    const tokens = [];
     
-    const usersSnap = await db.collection('usuarios')
-      .where('rol', '==', 'superadmin')
-      .get();
+    if (data.usuarioId === 'admin') {
+      const usersSnap = await db.collection('usuarios')
+        .where('rol', '==', 'superadmin')
+        .get();
 
-    if (usersSnap.empty) {
-      console.log('No superadmins found.');
-      return;
+      if (!usersSnap.empty) {
+        usersSnap.forEach((doc) => {
+          const user = doc.data();
+          if (user.fcmToken) tokens.push(user.fcmToken);
+        });
+      }
+    } else {
+      const userDoc = await db.collection('usuarios').doc(data.usuarioId).get();
+      if (userDoc.exists) {
+        const user = userDoc.data();
+        if (user.fcmToken) tokens.push(user.fcmToken);
+      }
     }
 
-    const tokens = [];
-    usersSnap.forEach((doc) => {
-      const user = doc.data();
-      if (user.fcmToken) {
-        tokens.push(user.fcmToken);
-      }
-    });
-
     if (tokens.length === 0) {
-      console.log('No FCM tokens found for superadmins.');
+      console.log('No FCM tokens found for target.');
       return;
     }
 
     const payload = {
       data: {
         title: data.titulo || 'Nueva Notificación',
-        body: data.mensaje || 'Tienes una nueva notificación en el sistema.',
+        body: (data.mensaje || 'Tienes una nueva notificación en el sistema.').replace(/\*\*/g, ''),
         tipo: data.tipo || 'info',
       }
     };
@@ -60,3 +59,4 @@ exports.sendPushNotification = onDocumentCreated('notificaciones/{docId}', async
   }
 });
 
+Object.assign(exports, require('./cron.js'));
