@@ -66,7 +66,7 @@ exports.dailyPaymentReminders = onSchedule({
 });
 
 exports.hourlyClassReminders = onSchedule({
-  schedule: '0 * * * *', // Every hour at minute 0
+  schedule: '*/30 * * * *', // Every 30 minutes
   timeZone: 'America/Argentina/Buenos_Aires'
 }, async (event) => {
   const db = getFirestore();
@@ -74,17 +74,21 @@ exports.hourlyClassReminders = onSchedule({
   
   const utc3Time = new Date(d.getTime() - (3 * 3600000));
   
-  const t4 = new Date(utc3Time.getTime() + (4 * 3600000));
-  const t4Date = `${t4.getUTCFullYear()}-${String(t4.getUTCMonth()+1).padStart(2,'0')}-${String(t4.getUTCDate()).padStart(2,'0')}`;
-  const t4Hour = `${String(t4.getUTCHours()).padStart(2,'0')}:00`;
+  const getTarget = (hoursAhead) => {
+    const t = new Date(utc3Time.getTime() + (hoursAhead * 3600000));
+    const tDate = `${t.getUTCFullYear()}-${String(t.getUTCMonth()+1).padStart(2,'0')}-${String(t.getUTCDate()).padStart(2,'0')}`;
+    const tHour = `${String(t.getUTCHours()).padStart(2,'0')}:${String(t.getUTCMinutes()).padStart(2,'0')}`;
+    return { t, tDate, tHour };
+  };
 
-  const t24 = new Date(utc3Time.getTime() + (24 * 3600000));
-  const t24Date = `${t24.getUTCFullYear()}-${String(t24.getUTCMonth()+1).padStart(2,'0')}-${String(t24.getUTCDate()).padStart(2,'0')}`;
-  const t24Hour = `${String(t24.getUTCHours()).padStart(2,'0')}:00`;
+  const tgt2 = getTarget(2);
+  const tgt4 = getTarget(4);
+  const tgt24 = getTarget(24);
 
   const diasMapLargo = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-  const t4DayStr = diasMapLargo[t4.getUTCDay()];
-  const t24DayStr = diasMapLargo[t24.getUTCDay()];
+  const t2DayStr = diasMapLargo[tgt2.t.getUTCDay()];
+  const t4DayStr = diasMapLargo[tgt4.t.getUTCDay()];
+  const t24DayStr = diasMapLargo[tgt24.t.getUTCDay()];
 
   try {
     const snapFeriados = await db.collection('feriados').get();
@@ -113,8 +117,9 @@ exports.hourlyClassReminders = onSchedule({
       }
 
       const targets = [
-        { type: '4h', date: t4Date, hour: t4Hour, dayStr: t4DayStr, timeObj: t4 },
-        { type: '24h', date: t24Date, hour: t24Hour, dayStr: t24DayStr, timeObj: t24 }
+        { type: '2h', date: tgt2.tDate, hour: tgt2.tHour, dayStr: t2DayStr, timeObj: tgt2.t },
+        { type: '4h', date: tgt4.tDate, hour: tgt4.tHour, dayStr: t4DayStr, timeObj: tgt4.t },
+        { type: '24h', date: tgt24.tDate, hour: tgt24.tHour, dayStr: t24DayStr, timeObj: tgt24.t }
       ];
 
       for (let t of targets) {
@@ -143,9 +148,16 @@ exports.hourlyClassReminders = onSchedule({
 
         if (tieneClase) {
           let titulo = "Recordatorio de Clase";
-          let mensaje = t.type === '4h' 
-            ? `Recordá que tenés clase HOY a las ${t.hour} hs.` 
-            : `Recordá que tenés clase MAÑANA a las ${t.hour} hs.`;
+          let mensaje = "";
+          
+          if (t.type === '2h') {
+            titulo = "Asistencia Habilitada";
+            mensaje = `Ya podés marcar el presente a tu clase de las ${t.hour} hs. ¡Te esperamos!`;
+          } else if (t.type === '4h') {
+            mensaje = `Recordá que tenés clase HOY a las ${t.hour} hs.`;
+          } else if (t.type === '24h') {
+            mensaje = `Recordá que tenés clase MAÑANA a las ${t.hour} hs.`;
+          }
 
           const notifRef = db.collection('notificaciones').doc();
           batch.set(notifRef, {

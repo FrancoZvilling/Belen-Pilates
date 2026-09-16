@@ -28,6 +28,19 @@ exports.sendPushNotification = onDocumentCreated('notificaciones/{docId}', async
           if (user.fcmToken) tokens.push(user.fcmToken);
         });
       }
+
+      // Si es una inasistencia, también se la enviamos a los profesores (admin)
+      if (data.tipo === 'inasistencia') {
+        const adminSnap = await db.collection('usuarios')
+          .where('rol', '==', 'admin')
+          .get();
+        if (!adminSnap.empty) {
+          adminSnap.forEach((doc) => {
+            const user = doc.data();
+            if (user.fcmToken) tokens.push(user.fcmToken);
+          });
+        }
+      }
     } else {
       const userDoc = await db.collection('usuarios').doc(data.usuarioId).get();
       if (userDoc.exists) {
