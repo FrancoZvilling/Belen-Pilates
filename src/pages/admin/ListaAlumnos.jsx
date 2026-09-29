@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Users, Search, Calendar } from 'lucide-react';
+import { Users, Search, Calendar, LogOut } from 'lucide-react';
 import { useAdminStore } from '../../store/adminStore';
+import { useAuthStore } from '../../store/authStore';
 import ModificarHorariosModal from '../../components/admin/ModificarHorariosModal';
 
 export default function ListaAlumnos() {
@@ -9,6 +10,7 @@ export default function ListaAlumnos() {
   const [alumnoEditandoHorarios, setAlumnoEditandoHorarios] = useState(null);
 
   const { usuarios, preRegistros } = useAdminStore();
+  const { signOut } = useAuthStore();
   
   // Combinar usuarios y pre-registros, filtrando solo los que tienen rol 'alumno'
   const todosLosUsuarios = [
@@ -45,10 +47,18 @@ export default function ListaAlumnos() {
       
       {/* Header Fijo */}
       <div className="bg-white px-5 pt-8 pb-4 sticky top-0 z-20 shadow-sm border-b border-gray-100">
-        <h1 className="text-3xl font-black text-gray-800 tracking-tight flex items-center gap-3">
-          <Users className="text-primary-turnos w-8 h-8" />
-          Alumnos
-        </h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-black text-gray-800 tracking-tight flex items-center gap-3">
+            <Users className="text-primary-turnos w-8 h-8" />
+            Alumnos
+          </h1>
+          <button 
+            onClick={signOut}
+            className="p-2 bg-red-50 rounded-full text-red-500 active:scale-95 transition-transform"
+          >
+            <LogOut size={24} />
+          </button>
+        </div>
         <p className="text-gray-500 text-sm mt-1 font-medium">
           Lista completa de alumnos de la academia.
         </p>

@@ -60,7 +60,7 @@ export const useAuthStore = create((set) => ({
           useAdminStore.getState().initializeAdminListeners();
         }
 
-        if (role === 'superadmin' || role === 'alumno') {
+        if (role === 'superadmin' || role === 'admin' || role === 'alumno') {
           import('../services/notificacionesService').then(module => {
             module.requestPushNotificationPermission(db, firebaseUser.uid);
           });
