@@ -10,7 +10,7 @@ export default function ListaAlumnos() {
   const [alumnoEditandoHorarios, setAlumnoEditandoHorarios] = useState(null);
 
   const { usuarios, preRegistros } = useAdminStore();
-  const { signOut } = useAuthStore();
+  const { logout } = useAuthStore();
   
   // Combinar usuarios y pre-registros, filtrando solo los que tienen rol 'alumno'
   const todosLosUsuarios = [
@@ -53,7 +53,7 @@ export default function ListaAlumnos() {
             Alumnos
           </h1>
           <button 
-            onClick={signOut}
+            onClick={logout}
             className="p-2 bg-red-50 rounded-full text-red-500 active:scale-95 transition-transform"
           >
             <LogOut size={24} />
