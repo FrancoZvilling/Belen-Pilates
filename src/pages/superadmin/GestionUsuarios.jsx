@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Users, Search, ShieldAlert, MoreVertical, Mail, Phone, UserPlus, Archive, RefreshCcw, Check, LogOut, Bell, XCircle, Trash2, Calendar } from 'lucide-react';
+import { Users, Search, ShieldAlert, MoreVertical, Mail, Phone, UserPlus, Archive, RefreshCcw, Check, LogOut, Bell, XCircle, Trash2, Calendar, AlertCircle } from 'lucide-react';
 import { db } from '../../config/firebase';
 import { doc, setDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import { archivarUsuario, reactivarUsuario } from '../../services/authService';
