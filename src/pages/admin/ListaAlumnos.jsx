@@ -1,16 +1,39 @@
 import { useState } from 'react';
-import { Users, Search, Calendar, LogOut } from 'lucide-react';
+import { Users, Search, Calendar, LogOut, Archive } from 'lucide-react';
 import { useAdminStore } from '../../store/adminStore';
 import { useAuthStore } from '../../store/authStore';
+import { db } from '../../config/firebase';
+import { archivarUsuario } from '../../services/authService';
 import ModificarHorariosModal from '../../components/admin/ModificarHorariosModal';
 
 export default function ListaAlumnos() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModificarHorariosOpen, setIsModificarHorariosOpen] = useState(false);
   const [alumnoEditandoHorarios, setAlumnoEditandoHorarios] = useState(null);
+  const [isArchivingId, setIsArchivingId] = useState(null);
 
   const { usuarios, preRegistros } = useAdminStore();
   const { logout } = useAuthStore();
+
+  const handleArchivar = async (usuario) => {
+    const confirmacion = window.confirm(
+      `¿Estás seguro de que querés archivar a ${usuario.nombre}? Dejará de aparecer en las listas activas y se liberarán sus turnos.`
+    );
+    if (!confirmacion) return;
+
+    try {
+      setIsArchivingId(usuario.id);
+      const res = await archivarUsuario(db, usuario.id, usuario.isPreRegistro);
+      if (!res.success) {
+        alert("Error al archivar alumno: " + res.error);
+      }
+    } catch (error) {
+      console.error("Error al archivar alumno:", error);
+      alert("Ocurrió un error inesperado al archivar al alumno.");
+    } finally {
+      setIsArchivingId(null);
+    }
+  };
   
   // Combinar usuarios y pre-registros, filtrando solo los que tienen rol 'alumno'
   const todosLosUsuarios = [
@@ -118,6 +141,15 @@ export default function ListaAlumnos() {
                   >
                     <Calendar size={16} />
                     Modificar Horarios
+                  </button>
+                  <button
+                    onClick={() => handleArchivar(usuario)}
+                    disabled={isArchivingId === usuario.id}
+                    className="px-4 bg-red-50 hover:bg-red-100 text-red-600 py-2.5 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-1.5 border border-red-100 disabled:opacity-50 active:scale-95 shrink-0"
+                    title="Archivar alumno"
+                  >
+                    <Archive size={16} />
+                    <span>{isArchivingId === usuario.id ? 'Archivando...' : 'Archivar'}</span>
                   </button>
                 </div>
               </div>

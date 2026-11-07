@@ -1,5 +1,6 @@
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { getFirestore } = require("firebase-admin/firestore");
+const { sendWhatsAppMessage } = require("./wasender");
 
 exports.dailyPaymentReminders = onSchedule({
   schedule: '0 9 * * *', // 9:00 AM every day
@@ -8,8 +9,13 @@ exports.dailyPaymentReminders = onSchedule({
   const db = getFirestore();
   const hoyUtc3 = new Date(new Date().getTime() - (3 * 3600000));
   hoyUtc3.setUTCHours(0,0,0,0);
+  const hoyStr = `${hoyUtc3.getUTCFullYear()}-${String(hoyUtc3.getUTCMonth()+1).padStart(2,'0')}-${String(hoyUtc3.getUTCDate()).padStart(2,'0')}`;
 
   try {
+    // 1. Obtener precios actualizados de la academia
+    const configPreciosDoc = await db.collection('configuracion').doc('precios').get();
+    const precios = configPreciosDoc.exists ? configPreciosDoc.data() : { plan_4_clases: 0, plan_8_clases: 0, plan_12_clases: 0 };
+
     const usersSnap = await db.collection('usuarios')
       .where('rol', '==', 'alumno')
       .where('estado', '==', 'activo')
@@ -17,6 +23,7 @@ exports.dailyPaymentReminders = onSchedule({
 
     const batch = db.batch();
     let notifsAdded = 0;
+    const wpQueue = [];
 
     usersSnap.forEach((docSnap) => {
       const user = docSnap.data();
@@ -30,18 +37,36 @@ exports.dailyPaymentReminders = onSchedule({
 
       let titulo = null;
       let mensaje = null;
+      let reminderType = null;
+      let wpTexto = null;
+
+      const primerNombre = (user.nombre || 'Hola').trim().split(' ')[0];
+      const plan = user.plan || 8;
+      const monto = (plan === 4 ? precios.plan_4_clases : (plan === 12 ? precios.plan_12_clases : precios.plan_8_clases)) || 0;
+      const montoStr = monto.toLocaleString('es-AR');
+
+      // Formatear vencimiento en DD-MM-YYYY
+      const parts = user.vencimiento_pago.split('-');
+      const fechaVencArg = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : user.vencimiento_pago;
 
       if (diffDays === 7) {
         titulo = "Aviso de Vencimiento";
         mensaje = "Tu mes de clases vence en 1 semana. Recordá abonar para mantener tu cupo.";
+        reminderType = '7d';
+        wpTexto = `¡Hola, ${primerNombre}! Esperamos que estés disfrutando tus clases en Loto Pilates. 🌸\n\nTe escribimos para recordarte que tu mes vence en una semana, el próximo ${fechaVencArg}.\n\nTu abono mensual (${plan} clases) es de $${montoStr}.\n\nSi querés renovar para asegurar tu horario el próximo mes, podés transferir a nuestro Alias: Belenpilates y enviarnos el comprobante por acá. ¡Muchas gracias!`;
       } else if (diffDays === 3) {
         titulo = "Aviso de Vencimiento";
         mensaje = "Tu mes de clases vence en 3 días.";
+        reminderType = '3d';
+        wpTexto = `¡Hola, ${primerNombre}! ¿Cómo estás? 🌸\n\nTe recordamos que tu cuota en Loto Pilates vence en 3 días (${fechaVencArg}).\n\nEl valor para renovar tu plan de ${plan} clases es de $${montoStr}.\nAlias para transferir: Belenpilates\n\nQuedamos a la espera de tu comprobante para mantener tu lugar reservado. ¡Te esperamos en clase!`;
       } else if (diffDays === 0) {
         titulo = "Mes Vencido";
         mensaje = "Tu mes de clases vence HOY. Por favor, regularizá tu pago para renovar tus clases.";
+        reminderType = '0d';
+        wpTexto = `¡Hola, ${primerNombre}! Te avisamos que tu mes de clases vence HOY (${fechaVencArg}). 🌸\n\nRecordá que para poder continuar asistiendo y mantener tus turnos fijos asignados, es necesario regularizar la cuota correspondiente a tu plan de ${plan} clases ($${montoStr}).\n\nAlias para transferir: Belenpilates\nPor favor, envianos el comprobante ni bien realices la transferencia para actualizar tu ficha. ¡Muchas gracias!`;
       }
 
+      // 1. Notificación Push en la App
       if (titulo && mensaje) {
         const notifRef = db.collection('notificaciones').doc();
         batch.set(notifRef, {
@@ -54,11 +79,59 @@ exports.dailyPaymentReminders = onSchedule({
         });
         notifsAdded++;
       }
+
+      // 2. Notificación por WhatsApp
+      if (wpTexto && user.telefono) {
+        wpQueue.push({
+          uid: docSnap.id,
+          nombre: user.nombre,
+          telefono: user.telefono,
+          texto: wpTexto,
+          reminderType: reminderType,
+          hoyStr: hoyStr
+        });
+      }
     });
 
     if (notifsAdded > 0) {
       await batch.commit();
-      console.log(`[Cron] Se crearon ${notifsAdded} notificaciones de pago.`);
+      console.log(`[Cron] Se crearon ${notifsAdded} notificaciones push de pago.`);
+    }
+
+    // Procesar cola de WhatsApp de forma secuencial y protegida
+    if (wpQueue.length > 0) {
+      console.log(`[Cron WP] Procesando ${wpQueue.length} mensajes de WhatsApp pendientes...`);
+      for (const item of wpQueue) {
+        try {
+          const logId = `${item.uid}_${item.hoyStr}_${item.reminderType}`;
+          const logRef = db.collection('whatsapp_logs').doc(logId);
+          const logSnap = await logRef.get();
+
+          if (logSnap.exists) {
+            console.log(`[Cron WP] Mensaje ya enviado hoy a ${item.nombre} (${logId})`);
+            continue;
+          }
+
+          const res = await sendWhatsAppMessage(item.telefono, item.texto);
+
+          await logRef.set({
+            usuarioId: item.uid,
+            nombre: item.nombre,
+            telefono: item.telefono,
+            tipo: item.reminderType,
+            fecha: item.hoyStr,
+            timestamp: new Date().toISOString(),
+            exito: res.success,
+            error: res.error || null
+          });
+
+          // Pausa de 1.5 segundos entre mensajes para cuidar la sesión de WhatsApp
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        } catch (itemErr) {
+          console.error(`[Cron WP] Error al enviar mensaje individual a ${item.nombre}:`, itemErr);
+        }
+      }
+      console.log(`[Cron WP] Finalizado envío de mensajes de WhatsApp.`);
     }
   } catch (error) {
     console.error("[Cron] Error en dailyPaymentReminders:", error);
